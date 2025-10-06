@@ -1689,7 +1689,7 @@ export default function IPTVManagerPro() {
               <UsuariosManager 
                 usuarios={usuarios} 
                 onGerenciar={gerenciarUsuario}
-                usuarioAtual={usuarioLogado}
+                usuarioAtual={usuarioLogado!}
               />
             </DialogContent>
           </Dialog>
