@@ -1,6 +1,7 @@
 {
-  "name": "template",
-  "version": "0.1.0",
+  "name": "iptv-manager-pro",
+  "version": "1.0.0",
+  "description": "Sistema completo de gerenciamento de clientes IPTV com funcionalidades avançadas",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -8,6 +9,19 @@
     "start": "next start",
     "lint": "next lint"
   },
+  "keywords": [
+    "iptv",
+    "gerenciamento",
+    "clientes",
+    "revendas",
+    "banners",
+    "whatsapp",
+    "nextjs",
+    "react",
+    "typescript"
+  ],
+  "author": "IPTV Manager Pro Team",
+  "license": "MIT",
   "dependencies": {
     "@fontsource/geist-mono": "^5.1.0",
     "@fontsource/geist-sans": "^5.1.0",
