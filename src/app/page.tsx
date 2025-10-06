@@ -536,15 +536,34 @@ const verificarVencimentoRevendas = (revendas: Revenda[]) => {
   return alertas
 }
 
+// Funções de persistência no localStorage
+const salvarDados = (chave: string, dados: any) => {
+  try {
+    localStorage.setItem(`iptv_manager_${chave}`, JSON.stringify(dados))
+  } catch (error) {
+    console.error('Erro ao salvar dados:', error)
+  }
+}
+
+const carregarDados = (chave: string, dadosPadrao: any = null) => {
+  try {
+    const dados = localStorage.getItem(`iptv_manager_${chave}`)
+    return dados ? JSON.parse(dados) : dadosPadrao
+  } catch (error) {
+    console.error('Erro ao carregar dados:', error)
+    return dadosPadrao
+  }
+}
+
 export default function IPTVManagerPro() {
-  // Estados de autenticação
+  // Estados de autenticação com persistência
   const [usuarioLogado, setUsuarioLogado] = useState<Usuario | null>(null)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [revendas, setRevendas] = useState<Revenda[]>([])
   const [mostrarLogin, setMostrarLogin] = useState(true)
   const [alertasVencimento, setAlertasVencimento] = useState<string[]>([])
 
-  // Estados do sistema
+  // Estados do sistema com persistência
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [banners, setBanners] = useState<Banner[]>([])
@@ -566,6 +585,8 @@ export default function IPTVManagerPro() {
   const [modalRevendas, setModalRevendas] = useState(false)
   const [modalEditarPlano, setModalEditarPlano] = useState(false)
   const [modalAlterarCredenciais, setModalAlterarCredenciais] = useState(false)
+  const [modalEditarRevenda, setModalEditarRevenda] = useState(false)
+  const [revendaEditando, setRevendaEditando] = useState<Revenda | null>(null)
   const [planoEditando, setPlanoEditando] = useState<Plano | null>(null)
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('todos')
@@ -575,67 +596,129 @@ export default function IPTVManagerPro() {
   const [resultadosBusca, setResultadosBusca] = useState<any[]>([])
   const [mostrarResultados, setMostrarResultados] = useState(false)
 
-  // Inicialização do sistema
+  // Inicialização do sistema com persistência
   useEffect(() => {
+    // Carregar dados salvos
+    const usuarioSalvo = carregarDados('usuario_logado')
+    const usuariosSalvos = carregarDados('usuarios', [])
+    const revendasSalvas = carregarDados('revendas', [])
+    const clientesSalvos = carregarDados('clientes', [])
+    const bannersSalvos = carregarDados('banners', [])
+    const configSalva = carregarDados('config_sistema')
+
     // Criar usuário admin padrão se não existir
-    const adminPadrao: Usuario = {
-      id: 'admin',
-      nome: 'Administrador',
-      email: 'admin@iptv.com',
-      senha: 'admin123',
-      tipo: 'admin',
-      ativo: true,
-      dataCadastro: '2024-01-01',
-      ultimoAcesso: new Date().toISOString()
+    let usuariosFinais = usuariosSalvos
+    if (usuariosSalvos.length === 0) {
+      const adminPadrao: Usuario = {
+        id: 'admin',
+        nome: 'Administrador',
+        email: 'admin@iptv.com',
+        senha: 'admin123',
+        tipo: 'admin',
+        ativo: true,
+        dataCadastro: '2024-01-01',
+        ultimoAcesso: new Date().toISOString()
+      }
+      usuariosFinais = [adminPadrao]
+      salvarDados('usuarios', usuariosFinais)
     }
 
-    setUsuarios([adminPadrao])
+    // Dados de exemplo apenas se não houver clientes salvos
+    let clientesFinais = clientesSalvos
+    if (clientesSalvos.length === 0) {
+      const clientesIniciais: Cliente[] = [
+        {
+          id: '1',
+          nome: 'João Silva',
+          whatsapp: '(11) 99999-9999',
+          plano: 'Premium',
+          status: 'ativo',
+          dataVencimento: '2024-01-15',
+          valorMensal: 49.90,
+          dataUltimoPagamento: '2023-12-15',
+          observacoes: 'Cliente pontual',
+          dataCadastro: '2023-06-10',
+          usuarioId: 'admin'
+        },
+        {
+          id: '2',
+          nome: 'Maria Santos',
+          whatsapp: '(11) 88888-8888',
+          plano: 'Básico',
+          status: 'ativo',
+          dataVencimento: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          valorMensal: 29.90,
+          dataUltimoPagamento: '2023-11-20',
+          observacoes: 'Cliente regular',
+          dataCadastro: '2023-08-15',
+          usuarioId: 'admin'
+        },
+        {
+          id: '3',
+          nome: 'Carlos Oliveira',
+          whatsapp: '(11) 77777-7777',
+          plano: 'Ultra',
+          status: 'ativo',
+          dataVencimento: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          valorMensal: 79.90,
+          dataUltimoPagamento: '2023-12-01',
+          observacoes: 'Cliente VIP',
+          dataCadastro: '2023-05-20',
+          usuarioId: 'admin'
+        }
+      ]
+      clientesFinais = clientesIniciais
+      salvarDados('clientes', clientesFinais)
+    }
 
-    // Dados de exemplo
-    const clientesIniciais: Cliente[] = [
-      {
-        id: '1',
-        nome: 'João Silva',
-        whatsapp: '(11) 99999-9999',
-        plano: 'Premium',
-        status: 'ativo',
-        dataVencimento: '2024-01-15',
-        valorMensal: 49.90,
-        dataUltimoPagamento: '2023-12-15',
-        observacoes: 'Cliente pontual',
-        dataCadastro: '2023-06-10',
-        usuarioId: 'admin'
-      },
-      {
-        id: '2',
-        nome: 'Maria Santos',
-        whatsapp: '(11) 88888-8888',
-        plano: 'Básico',
-        status: 'ativo',
-        dataVencimento: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Vence em 2 dias
-        valorMensal: 29.90,
-        dataUltimoPagamento: '2023-11-20',
-        observacoes: 'Cliente regular',
-        dataCadastro: '2023-08-15',
-        usuarioId: 'admin'
-      },
-      {
-        id: '3',
-        nome: 'Carlos Oliveira',
-        whatsapp: '(11) 77777-7777',
-        plano: 'Ultra',
-        status: 'ativo',
-        dataVencimento: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Vence em 1 dia
-        valorMensal: 79.90,
-        dataUltimoPagamento: '2023-12-01',
-        observacoes: 'Cliente VIP',
-        dataCadastro: '2023-05-20',
-        usuarioId: 'admin'
+    // Aplicar dados carregados
+    setUsuarios(usuariosFinais)
+    setRevendas(revendasSalvas)
+    setClientes(clientesFinais)
+    setBanners(bannersSalvos)
+    
+    if (configSalva) {
+      setConfigSistema(configSalva)
+    }
+
+    // Verificar se há usuário logado salvo
+    if (usuarioSalvo) {
+      // Verificar se o usuário ainda existe e está ativo
+      const usuarioValido = usuariosFinais.find(u => u.id === usuarioSalvo.id && u.ativo) ||
+                           revendasSalvas.find(r => r.id === usuarioSalvo.id && r.ativo && !r.bloqueado)
+      
+      if (usuarioValido) {
+        setUsuarioLogado(usuarioSalvo)
+        setMostrarLogin(false)
+      } else {
+        // Limpar usuário inválido
+        localStorage.removeItem('iptv_manager_usuario_logado')
       }
-    ]
-
-    setClientes(clientesIniciais)
+    }
   }, [])
+
+  // Salvar dados sempre que houver mudanças
+  useEffect(() => {
+    if (usuarios.length > 0) {
+      salvarDados('usuarios', usuarios)
+    }
+  }, [usuarios])
+
+  useEffect(() => {
+    salvarDados('revendas', revendas)
+  }, [revendas])
+
+  useEffect(() => {
+    salvarDados('clientes', clientes)
+  }, [clientes])
+
+  useEffect(() => {
+    salvarDados('banners', banners)
+  }, [banners])
+
+  useEffect(() => {
+    salvarDados('config_sistema', configSistema)
+  }, [configSistema])
 
   // Verificar vencimentos de revendas
   useEffect(() => {
@@ -674,15 +757,17 @@ export default function IPTVManagerPro() {
     }
   }, [buscaConteudo])
 
-  // Funções de autenticação - REMOVIDO REGISTRO PÚBLICO
+  // Funções de autenticação com persistência
   const fazerLogin = (email: string, senha: string) => {
     // Verificar usuários admin
     const usuario = usuarios.find(u => u.email === email && u.senha === senha && u.ativo)
     if (usuario) {
-      setUsuarioLogado(usuario)
+      const usuarioAtualizado = { ...usuario, ultimoAcesso: new Date().toISOString() }
+      setUsuarioLogado(usuarioAtualizado)
       setMostrarLogin(false)
+      salvarDados('usuario_logado', usuarioAtualizado)
       setUsuarios(usuarios.map(u => 
-        u.id === usuario.id ? { ...u, ultimoAcesso: new Date().toISOString() } : u
+        u.id === usuario.id ? usuarioAtualizado : u
       ))
       return
     }
@@ -703,6 +788,7 @@ export default function IPTVManagerPro() {
       }
       setUsuarioLogado(usuarioRevenda)
       setMostrarLogin(false)
+      salvarDados('usuario_logado', usuarioRevenda)
       // Atualizar último acesso da revenda
       setRevendas(revendas.map(r => 
         r.id === revenda.id ? { ...r, ultimoAcesso: new Date().toISOString() } : r
@@ -716,6 +802,7 @@ export default function IPTVManagerPro() {
   const logout = () => {
     setUsuarioLogado(null)
     setMostrarLogin(true)
+    localStorage.removeItem('iptv_manager_usuario_logado')
   }
 
   // Função para verificar se usuário tem permissões de admin (admin ou revenda master)
@@ -816,21 +903,25 @@ export default function IPTVManagerPro() {
   const alterarCredenciais = (novoEmail: string, novaSenha: string) => {
     if (usuarioLogado) {
       // Atualizar usuário
-      setUsuarios(usuarios.map(usuario => 
+      const usuariosAtualizados = usuarios.map(usuario => 
         usuario.id === usuarioLogado.id 
           ? { ...usuario, email: novoEmail, senha: novaSenha }
           : usuario
-      ))
+      )
+      setUsuarios(usuariosAtualizados)
       
       // Atualizar revenda se for o caso
-      setRevendas(revendas.map(revenda => 
+      const revendasAtualizadas = revendas.map(revenda => 
         revenda.id === usuarioLogado.id 
           ? { ...revenda, email: novoEmail, senha: novaSenha }
           : revenda
-      ))
+      )
+      setRevendas(revendasAtualizadas)
       
       // Atualizar usuário logado
-      setUsuarioLogado({ ...usuarioLogado, email: novoEmail, senha: novaSenha })
+      const usuarioAtualizado = { ...usuarioLogado, email: novoEmail, senha: novaSenha }
+      setUsuarioLogado(usuarioAtualizado)
+      salvarDados('usuario_logado', usuarioAtualizado)
       
       alert('Credenciais alteradas com sucesso!')
     }
@@ -869,6 +960,22 @@ export default function IPTVManagerPro() {
       ultimoAcesso: new Date().toISOString()
     }
     setRevendas([...revendas, novaRevenda])
+  }
+
+  const editarRevenda = (revendaEditada: Revenda) => {
+    setRevendas(revendas.map(revenda => 
+      revenda.id === revendaEditada.id ? revendaEditada : revenda
+    ))
+  }
+
+  const excluirRevenda = (revendaId: string) => {
+    if (confirm('Tem certeza que deseja excluir esta revenda? Esta ação não pode ser desfeita.')) {
+      setRevendas(revendas.filter(revenda => revenda.id !== revendaId))
+      // Se a revenda excluída for o usuário logado, fazer logout
+      if (usuarioLogado?.id === revendaId) {
+        logout()
+      }
+    }
   }
 
   const gerenciarRevenda = (revendaId: string, acao: 'bloquear' | 'desbloquear' | 'renovar') => {
@@ -911,7 +1018,7 @@ export default function IPTVManagerPro() {
     document.body.removeChild(link)
   }
 
-  // Tela de Login - SEM OPÇÃO DE REGISTRO
+  // Tela de Login
   if (mostrarLogin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
@@ -1535,11 +1642,43 @@ export default function IPTVManagerPro() {
               <RevendasManager 
                 revendas={revendas}
                 onAdicionar={adicionarRevenda}
+                onEditar={editarRevenda}
+                onExcluir={excluirRevenda}
                 onGerenciar={gerenciarRevenda}
+                onEditarClick={(revenda) => {
+                  setRevendaEditando(revenda)
+                  setModalEditarRevenda(true)
+                }}
               />
             </DialogContent>
           </Dialog>
         )}
+
+        {/* Modal de Editar Revenda */}
+        <Dialog open={modalEditarRevenda} onOpenChange={setModalEditarRevenda}>
+          <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Editar Revenda</DialogTitle>
+              <DialogDescription className="text-slate-300">
+                Altere os dados da revenda
+              </DialogDescription>
+            </DialogHeader>
+            {revendaEditando && (
+              <EditarRevendaForm 
+                revenda={revendaEditando}
+                onSubmit={(revendaEditada) => {
+                  editarRevenda(revendaEditada)
+                  setModalEditarRevenda(false)
+                  setRevendaEditando(null)
+                }}
+                onClose={() => {
+                  setModalEditarRevenda(false)
+                  setRevendaEditando(null)
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
@@ -2593,10 +2732,13 @@ function UsuariosManager({ usuarios, onGerenciar, usuarioAtual }: {
   )
 }
 
-function RevendasManager({ revendas, onAdicionar, onGerenciar }: {
+function RevendasManager({ revendas, onAdicionar, onEditar, onExcluir, onGerenciar, onEditarClick }: {
   revendas: Revenda[]
   onAdicionar: (revenda: Omit<Revenda, 'id' | 'dataCadastro' | 'ultimoAcesso'>) => void
+  onEditar: (revenda: Revenda) => void
+  onExcluir: (revendaId: string) => void
   onGerenciar: (revendaId: string, acao: 'bloquear' | 'desbloquear' | 'renovar') => void
+  onEditarClick: (revenda: Revenda) => void
 }) {
   const [modalNovaRevenda, setModalNovaRevenda] = useState(false)
 
@@ -2714,6 +2856,26 @@ function RevendasManager({ revendas, onAdicionar, onGerenciar }: {
                     </div>
                     
                     <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onEditarClick(revenda)}
+                        className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20"
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
+                        Editar
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onExcluir(revenda.id)}
+                        className="border-red-500/50 text-red-400 hover:bg-red-500/20"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Excluir
+                      </Button>
+                      
                       <Button
                         size="sm"
                         variant="outline"
@@ -3001,6 +3163,219 @@ function NovaRevendaForm({ onSubmit, onClose }: {
         <Button type="submit" className="bg-green-600 hover:bg-green-700">
           <UserPlus className="w-4 h-4 mr-2" />
           Cadastrar Revenda
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function EditarRevendaForm({ revenda, onSubmit, onClose }: {
+  revenda: Revenda
+  onSubmit: (revenda: Revenda) => void
+  onClose: () => void
+}) {
+  const [formData, setFormData] = useState({
+    ...revenda,
+    permissoes: revenda.permissoes || {
+      clientes: true,
+      pagamentos: true,
+      banners: true,
+      configuracoes: false,
+      usuarios: false,
+      revendas: false,
+      planos: false
+    }
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Definir permissões baseadas no tipo
+    let permissoes = formData.permissoes
+    
+    if (formData.tipo === 'master') {
+      // Revenda master tem todas as permissões EXCETO configurações
+      permissoes = {
+        clientes: true,
+        pagamentos: true,
+        banners: true,
+        configuracoes: false, // SEMPRE REMOVIDO para revenda master
+        usuarios: true,
+        revendas: true,
+        planos: true
+      }
+    }
+    
+    onSubmit({
+      ...formData,
+      permissoes
+    })
+  }
+
+  const handlePermissaoChange = (permissao: keyof NonNullable<Revenda['permissoes']>, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      permissoes: {
+        ...prev.permissoes,
+        [permissao]: checked
+      }
+    }))
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="nome">Nome da Revenda</Label>
+          <Input
+            id="nome"
+            value={formData.nome}
+            onChange={(e) => setFormData({...formData, nome: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="email">Email de Acesso</Label>
+          <Input
+            id="email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({...formData, email: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="senha">Nova Senha (deixe em branco para manter atual)</Label>
+          <Input
+            id="senha"
+            type="password"
+            value=""
+            onChange={(e) => e.target.value && setFormData({...formData, senha: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            placeholder="Digite nova senha ou deixe em branco"
+          />
+        </div>
+        <div>
+          <Label htmlFor="valorMensal">Valor Mensal (R$)</Label>
+          <Input
+            id="valorMensal"
+            type="number"
+            step="0.01"
+            value={formData.valorMensal}
+            onChange={(e) => setFormData({...formData, valorMensal: parseFloat(e.target.value)})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div className="col-span-1 lg:col-span-2">
+          <Label htmlFor="tipo">Tipo de Revenda</Label>
+          <Select value={formData.tipo} onValueChange={(value: 'master' | 'simples') => setFormData({...formData, tipo: value})}>
+            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-800 border-slate-700">
+              <SelectItem value="simples">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  Revenda Simples - Permissões personalizáveis
+                </div>
+              </SelectItem>
+              <SelectItem value="master">
+                <div className="flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-yellow-400" />
+                  Revenda Master - Todos os benefícios (exceto configurações)
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Seleção de Permissões apenas para revenda simples */}
+        {formData.tipo === 'simples' && (
+          <div className="col-span-1 lg:col-span-2">
+            <Label className="text-white mb-3 block">Permissões do Painel</Label>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-slate-700 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="clientes"
+                  checked={formData.permissoes.clientes}
+                  onCheckedChange={(checked) => handlePermissaoChange('clientes', checked as boolean)}
+                />
+                <Label htmlFor="clientes" className="text-sm text-white">Clientes</Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="pagamentos"
+                  checked={formData.permissoes.pagamentos}
+                  onCheckedChange={(checked) => handlePermissaoChange('pagamentos', checked as boolean)}
+                />
+                <Label htmlFor="pagamentos" className="text-sm text-white">Pagamentos</Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="banners"
+                  checked={formData.permissoes.banners}
+                  onCheckedChange={(checked) => handlePermissaoChange('banners', checked as boolean)}
+                />
+                <Label htmlFor="banners" className="text-sm text-white">Banners</Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="usuarios"
+                  checked={formData.permissoes.usuarios}
+                  onCheckedChange={(checked) => handlePermissaoChange('usuarios', checked as boolean)}
+                />
+                <Label htmlFor="usuarios" className="text-sm text-white">Usuários</Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="revendas"
+                  checked={formData.permissoes.revendas}
+                  onCheckedChange={(checked) => handlePermissaoChange('revendas', checked as boolean)}
+                />
+                <Label htmlFor="revendas" className="text-sm text-white">Revendas</Label>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div className="col-span-1 lg:col-span-2">
+          <Label htmlFor="dataVencimento">Data de Vencimento</Label>
+          <Input
+            id="dataVencimento"
+            type="date"
+            value={formData.dataVencimento}
+            onChange={(e) => setFormData({...formData, dataVencimento: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+      </div>
+      
+      <div>
+        <Label htmlFor="observacoes">Observações</Label>
+        <Textarea
+          id="observacoes"
+          value={formData.observacoes}
+          onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+          className="bg-slate-700 border-slate-600 text-white"
+          rows={3}
+        />
+      </div>
+      
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+          <Edit className="w-4 h-4 mr-2" />
+          Salvar Alterações
         </Button>
       </div>
     </form>
