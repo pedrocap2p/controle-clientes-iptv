@@ -536,10 +536,12 @@ const verificarVencimentoRevendas = (revendas: Revenda[]) => {
   return alertas
 }
 
-// Funções de persistência no localStorage
+// Funções de persistência no localStorage com chaves únicas
+const STORAGE_PREFIX = 'iptv_manager_v2_'
+
 const salvarDados = (chave: string, dados: any) => {
   try {
-    localStorage.setItem(`iptv_manager_${chave}`, JSON.stringify(dados))
+    localStorage.setItem(`${STORAGE_PREFIX}${chave}`, JSON.stringify(dados))
   } catch (error) {
     console.error('Erro ao salvar dados:', error)
   }
@@ -547,7 +549,7 @@ const salvarDados = (chave: string, dados: any) => {
 
 const carregarDados = (chave: string, dadosPadrao: any = null) => {
   try {
-    const dados = localStorage.getItem(`iptv_manager_${chave}`)
+    const dados = localStorage.getItem(`${STORAGE_PREFIX}${chave}`)
     return dados ? JSON.parse(dados) : dadosPadrao
   } catch (error) {
     console.error('Erro ao carregar dados:', error)
@@ -577,7 +579,9 @@ export default function IPTVManagerPro() {
 
   // Estados de UI
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
+  const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null)
   const [modalAberto, setModalAberto] = useState(false)
+  const [modalEditarCliente, setModalEditarCliente] = useState(false)
   const [modalPagamento, setModalPagamento] = useState(false)
   const [modalBanner, setModalBanner] = useState(false)
   const [modalConfig, setModalConfig] = useState(false)
@@ -605,6 +609,7 @@ export default function IPTVManagerPro() {
     const clientesSalvos = carregarDados('clientes', [])
     const bannersSalvos = carregarDados('banners', [])
     const configSalva = carregarDados('config_sistema')
+    const planosSalvos = carregarDados('planos', planosIniciais)
 
     // Criar usuário admin padrão se não existir
     let usuariosFinais = usuariosSalvos
@@ -676,6 +681,7 @@ export default function IPTVManagerPro() {
     setRevendas(revendasSalvas)
     setClientes(clientesFinais)
     setBanners(bannersSalvos)
+    setPlanos(planosSalvos)
     
     if (configSalva) {
       setConfigSistema(configSalva)
@@ -692,7 +698,7 @@ export default function IPTVManagerPro() {
         setMostrarLogin(false)
       } else {
         // Limpar usuário inválido
-        localStorage.removeItem('iptv_manager_usuario_logado')
+        localStorage.removeItem(`${STORAGE_PREFIX}usuario_logado`)
       }
     }
   }, [])
@@ -719,6 +725,10 @@ export default function IPTVManagerPro() {
   useEffect(() => {
     salvarDados('config_sistema', configSistema)
   }, [configSistema])
+
+  useEffect(() => {
+    salvarDados('planos', planos)
+  }, [planos])
 
   // Verificar vencimentos de revendas
   useEffect(() => {
@@ -802,7 +812,7 @@ export default function IPTVManagerPro() {
   const logout = () => {
     setUsuarioLogado(null)
     setMostrarLogin(true)
-    localStorage.removeItem('iptv_manager_usuario_logado')
+    localStorage.removeItem(`${STORAGE_PREFIX}usuario_logado`)
   }
 
   // Função para verificar se usuário tem permissões de admin (admin ou revenda master)
@@ -822,7 +832,7 @@ export default function IPTVManagerPro() {
     
     // Para revenda master, todas as permissões EXCETO configurações
     if (revendaAtual.tipo === 'master') {
-      if (permissao === 'configuracoes') return false
+      if (permissao === 'configuracoes') return false // SEMPRE REMOVIDO para revenda master
       return true
     }
     
@@ -865,6 +875,12 @@ export default function IPTVManagerPro() {
       usuarioId: usuarioLogado?.id || ''
     }
     setClientes([...clientes, novoCliente])
+  }
+
+  const editarCliente = (clienteEditado: Cliente) => {
+    setClientes(clientes.map(cliente => 
+      cliente.id === clienteEditado.id ? clienteEditado : cliente
+    ))
   }
 
   const excluirCliente = (clienteId: string) => {
@@ -1320,6 +1336,18 @@ export default function IPTVManagerPro() {
                                   <Button
                                     size="sm"
                                     variant="outline"
+                                    onClick={() => {
+                                      setClienteEditando(cliente)
+                                      setModalEditarCliente(true)
+                                    }}
+                                    className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
                                     onClick={() => excluirCliente(cliente.id)}
                                     className="border-red-500/50 text-red-400 hover:bg-red-500/20"
                                   >
@@ -1419,6 +1447,18 @@ export default function IPTVManagerPro() {
                                         className="border-white/20 text-white hover:bg-white/10"
                                       >
                                         <Eye className="w-4 h-4" />
+                                      </Button>
+                                      
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setClienteEditando(cliente)
+                                          setModalEditarCliente(true)
+                                        }}
+                                        className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20"
+                                      >
+                                        <Edit className="w-4 h-4" />
                                       </Button>
                                     </div>
                                   </div>
@@ -1573,6 +1613,32 @@ export default function IPTVManagerPro() {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* Modal de Editar Cliente */}
+        <Dialog open={modalEditarCliente} onOpenChange={setModalEditarCliente}>
+          <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Editar Cliente</DialogTitle>
+              <DialogDescription className="text-slate-300">
+                Altere os dados do cliente
+              </DialogDescription>
+            </DialogHeader>
+            {clienteEditando && (
+              <EditarClienteForm 
+                cliente={clienteEditando}
+                onSubmit={(clienteEditado) => {
+                  editarCliente(clienteEditado)
+                  setModalEditarCliente(false)
+                  setClienteEditando(null)
+                }}
+                onClose={() => {
+                  setModalEditarCliente(false)
+                  setClienteEditando(null)
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Alterar Credenciais */}
         <Dialog open={modalAlterarCredenciais} onOpenChange={setModalAlterarCredenciais}>
@@ -1908,6 +1974,127 @@ function NovoClienteForm({ onSubmit, onClose }: {
         </Button>
         <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
           Cadastrar Cliente
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function EditarClienteForm({ cliente, onSubmit, onClose }: {
+  cliente: Cliente
+  onSubmit: (cliente: Cliente) => void
+  onClose: () => void
+}) {
+  const [formData, setFormData] = useState({
+    ...cliente
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSubmit(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="nome">Nome Completo</Label>
+          <Input
+            id="nome"
+            value={formData.nome}
+            onChange={(e) => setFormData({...formData, nome: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="whatsapp">WhatsApp</Label>
+          <Input
+            id="whatsapp"
+            value={formData.whatsapp}
+            onChange={(e) => setFormData({...formData, whatsapp: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            placeholder="(11) 99999-9999"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="plano">Plano</Label>
+          <Input
+            id="plano"
+            value={formData.plano}
+            onChange={(e) => setFormData({...formData, plano: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="status">Status</Label>
+          <Select value={formData.status} onValueChange={(value: Cliente['status']) => setFormData({...formData, status: value})}>
+            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-800 border-slate-700">
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="inativo">Inativo</SelectItem>
+              <SelectItem value="suspenso">Suspenso</SelectItem>
+              <SelectItem value="vencido">Vencido</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="valorMensal">Valor Mensal (R$)</Label>
+          <Input
+            id="valorMensal"
+            type="number"
+            step="0.01"
+            value={formData.valorMensal}
+            onChange={(e) => setFormData({...formData, valorMensal: parseFloat(e.target.value)})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="dataVencimento">Data de Vencimento</Label>
+          <Input
+            id="dataVencimento"
+            type="date"
+            value={formData.dataVencimento}
+            onChange={(e) => setFormData({...formData, dataVencimento: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="dataUltimoPagamento">Data do Último Pagamento</Label>
+          <Input
+            id="dataUltimoPagamento"
+            type="date"
+            value={formData.dataUltimoPagamento}
+            onChange={(e) => setFormData({...formData, dataUltimoPagamento: e.target.value})}
+            className="bg-slate-700 border-slate-600 text-white"
+          />
+        </div>
+      </div>
+      
+      <div>
+        <Label htmlFor="observacoes">Observações</Label>
+        <Textarea
+          id="observacoes"
+          value={formData.observacoes}
+          onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+          className="bg-slate-700 border-slate-600 text-white"
+          rows={3}
+        />
+      </div>
+      
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+          <Edit className="w-4 h-4 mr-2" />
+          Salvar Alterações
         </Button>
       </div>
     </form>
