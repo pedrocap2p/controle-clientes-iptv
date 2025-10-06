@@ -733,6 +733,13 @@ export default function IPTVManagerPro() {
     const revendaAtual = revendas.find(r => r.id === usuarioLogado?.id)
     if (!revendaAtual) return false
     
+    // Para revenda master, todas as permissões EXCETO configurações
+    if (revendaAtual.tipo === 'master') {
+      if (permissao === 'configuracoes') return false
+      return true
+    }
+    
+    // Para revenda simples, verificar permissões específicas
     return revendaAtual.permissoes?.[permissao] ?? false
   }
 
@@ -2782,15 +2789,20 @@ function NovaRevendaForm({ onSubmit, onClose }: {
     e.preventDefault()
     
     // Definir permissões baseadas no tipo
-    const permissoes = formData.tipo === 'master' ? {
-      clientes: true,
-      pagamentos: true,
-      banners: true,
-      configuracoes: true,
-      usuarios: true,
-      revendas: true,
-      planos: true
-    } : formData.permissoes
+    let permissoes = formData.permissoes
+    
+    if (formData.tipo === 'master') {
+      // Revenda master tem todas as permissões EXCETO configurações
+      permissoes = {
+        clientes: true,
+        pagamentos: true,
+        banners: true,
+        configuracoes: false, // SEMPRE REMOVIDO para revenda master
+        usuarios: true,
+        revendas: true,
+        planos: true
+      }
+    }
     
     onSubmit({
       ...formData,
@@ -2885,20 +2897,20 @@ function NovaRevendaForm({ onSubmit, onClose }: {
               <SelectItem value="master">
                 <div className="flex items-center gap-2">
                   <Crown className="w-4 h-4 text-yellow-400" />
-                  Revenda Master - Todos os benefícios do administrador
+                  Revenda Master - Todos os benefícios (exceto configurações)
                 </div>
               </SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-gray-400 mt-1">
             {formData.tipo === 'master' ? 
-              '👑 Revenda Master: Acesso completo a todas as funcionalidades administrativas' :
+              '👑 Revenda Master: Acesso a todas as funcionalidades, exceto configurações do sistema' :
               '📦 Revenda Simples: Selecione as permissões específicas abaixo'
             }
           </p>
         </div>
         
-        {/* Seleção de Permissões para Revenda Simples */}
+        {/* Seleção de Permissões apenas para revenda simples */}
         {formData.tipo === 'simples' && (
           <div className="col-span-1 lg:col-span-2">
             <Label className="text-white mb-3 block">Permissões do Painel</Label>
@@ -2928,15 +2940,6 @@ function NovaRevendaForm({ onSubmit, onClose }: {
                   onCheckedChange={(checked) => handlePermissaoChange('banners', checked as boolean)}
                 />
                 <Label htmlFor="banners" className="text-sm text-white">Banners</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="configuracoes"
-                  checked={formData.permissoes.configuracoes}
-                  onCheckedChange={(checked) => handlePermissaoChange('configuracoes', checked as boolean)}
-                />
-                <Label htmlFor="configuracoes" className="text-sm text-white">Configurações</Label>
               </div>
               
               <div className="flex items-center space-x-2">
