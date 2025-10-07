@@ -11,7 +11,19 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Users, DollarSign, Tv, AlertCircle, Plus, Search, Edit, Trash2, Eye, Calendar, Phone, LogOut, Settings, Image, Download, Upload, Shield, UserCheck, Crown, Film, Monitor, Trophy, UserPlus, Lock, RefreshCw, Star, AlertTriangle, Clock } from 'lucide-react'
+import { Users, DollarSign, Tv, AlertCircle, Plus, Search, Edit, Trash2, Eye, Calendar, Phone, LogOut, Settings, Image, Download, Upload, Shield, UserCheck, Crown, Film, Monitor, Trophy, UserPlus, Lock, RefreshCw, Star, AlertTriangle, Clock, Database } from 'lucide-react'
+
+// Importar serviços do Supabase
+import { 
+  usuarioService, 
+  revendaService, 
+  clienteService, 
+  bannerService, 
+  planoService, 
+  configService,
+  inicializarDados,
+  verificarConexao
+} from '@/lib/database'
 
 interface Usuario {
   id: string
@@ -20,8 +32,8 @@ interface Usuario {
   senha: string
   tipo: 'admin' | 'usuario'
   ativo: boolean
-  dataCadastro: string
-  ultimoAcesso: string
+  data_cadastro: string
+  ultimo_acesso: string
 }
 
 interface Revenda {
@@ -30,15 +42,15 @@ interface Revenda {
   email: string
   senha: string
   ativo: boolean
-  dataVencimento: string
-  valorMensal: number
-  dataCadastro: string
-  ultimoAcesso: string
+  data_vencimento: string
+  valor_mensal: number
+  data_cadastro: string
+  ultimo_acesso: string
   bloqueado: boolean
   observacoes: string
-  logoPersonalizada?: string
-  posicaoLogo?: 'direita' | 'centro'
-  diasAlertaVencimento?: number
+  logo_personalizada?: string
+  posicao_logo?: 'direita' | 'centro'
+  dias_alerta_vencimento?: number
   tipo: 'master' | 'simples'
   permissoes?: {
     clientes: boolean
@@ -57,12 +69,12 @@ interface Cliente {
   whatsapp: string
   plano: string
   status: 'ativo' | 'inativo' | 'suspenso' | 'vencido'
-  dataVencimento: string
-  valorMensal: number
-  dataUltimoPagamento: string
+  data_vencimento: string
+  valor_mensal: number
+  data_ultimo_pagamento: string
   observacoes: string
-  dataCadastro: string
-  usuarioId: string
+  data_cadastro: string
+  usuario_id: string
 }
 
 interface Pagamento {
@@ -79,21 +91,21 @@ interface Pagamento {
 interface Banner {
   id: string
   categoria: 'filme' | 'serie' | 'esporte'
-  imagemUrl: string
-  logoUrl: string
-  usuarioId: string
-  dataCriacao: string
+  imagem_url: string
+  logo_url: string
+  usuario_id: string
+  data_criacao: string
   sinopse?: string
-  dataEvento?: string
-  logoPersonalizada?: string
-  posicaoLogo?: 'direita' | 'centro'
+  data_evento?: string
+  logo_personalizada?: string
+  posicao_logo?: 'direita' | 'centro'
 }
 
 interface ConfigSistema {
-  logoUrl: string
-  nomeSistema: string
-  corPrimaria: string
-  corSecundaria: string
+  logo_url: string
+  nome_sistema: string
+  cor_primaria: string
+  cor_secundaria: string
 }
 
 interface Plano {
@@ -120,13 +132,6 @@ interface JogoFutebol {
   imagemVisitante: string
   imagemBanner: string
 }
-
-const planosIniciais: Plano[] = [
-  { id: '1', nome: 'Básico', valor: 29.90, canais: '100+ canais', descricao: 'Plano básico com canais essenciais', ativo: true },
-  { id: '2', nome: 'Premium', valor: 49.90, canais: '200+ canais + filmes', descricao: 'Plano premium com filmes inclusos', ativo: true },
-  { id: '3', nome: 'Ultra', valor: 79.90, canais: '300+ canais + filmes + séries', descricao: 'Plano completo com séries', ativo: true },
-  { id: '4', nome: 'Família', valor: 99.90, canais: '400+ canais + múltiplas telas', descricao: 'Plano familiar com múltiplas telas', ativo: true }
-]
 
 // Base de dados expandida com filmes de 1940 até atual
 const acervoCompleto = {
@@ -511,7 +516,7 @@ const verificarVencimentoRevendas = (revendas: Revenda[]) => {
   const alertas: string[] = []
   
   revendas.forEach(revenda => {
-    const dataVencimento = new Date(revenda.dataVencimento)
+    const dataVencimento = new Date(revenda.data_vencimento)
     const diffTime = dataVencimento.getTime() - hoje.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     
@@ -536,46 +541,29 @@ const verificarVencimentoRevendas = (revendas: Revenda[]) => {
   return alertas
 }
 
-// Funções de persistência no localStorage com chaves únicas
-const STORAGE_PREFIX = 'iptv_manager_v2_'
-
-const salvarDados = (chave: string, dados: any) => {
-  try {
-    localStorage.setItem(`${STORAGE_PREFIX}${chave}`, JSON.stringify(dados))
-  } catch (error) {
-    console.error('Erro ao salvar dados:', error)
-  }
-}
-
-const carregarDados = (chave: string, dadosPadrao: any = null) => {
-  try {
-    const dados = localStorage.getItem(`${STORAGE_PREFIX}${chave}`)
-    return dados ? JSON.parse(dados) : dadosPadrao
-  } catch (error) {
-    console.error('Erro ao carregar dados:', error)
-    return dadosPadrao
-  }
-}
-
 export default function IPTVManagerPro() {
-  // Estados de autenticação com persistência
+  // Estados de autenticação
   const [usuarioLogado, setUsuarioLogado] = useState<Usuario | null>(null)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [revendas, setRevendas] = useState<Revenda[]>([])
   const [mostrarLogin, setMostrarLogin] = useState(true)
   const [alertasVencimento, setAlertasVencimento] = useState<string[]>([])
 
-  // Estados do sistema com persistência
+  // Estados do sistema
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [banners, setBanners] = useState<Banner[]>([])
-  const [planos, setPlanos] = useState<Plano[]>(planosIniciais)
+  const [planos, setPlanos] = useState<Plano[]>([])
   const [configSistema, setConfigSistema] = useState<ConfigSistema>({
-    logoUrl: '',
-    nomeSistema: 'IPTV Manager Pro',
-    corPrimaria: '#7c3aed',
-    corSecundaria: '#a855f7'
+    logo_url: '',
+    nome_sistema: 'IPTV Manager Pro',
+    cor_primaria: '#7c3aed',
+    cor_secundaria: '#a855f7'
   })
+
+  // Estados de conexão
+  const [conectado, setConectado] = useState(false)
+  const [carregando, setCarregando] = useState(true)
 
   // Estados de UI
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
@@ -600,16 +588,149 @@ export default function IPTVManagerPro() {
   const [resultadosBusca, setResultadosBusca] = useState<any[]>([])
   const [mostrarResultados, setMostrarResultados] = useState(false)
 
-  // Inicialização do sistema com persistência
+  // Inicialização do sistema com Supabase
   useEffect(() => {
-    // Carregar dados salvos
-    const usuarioSalvo = carregarDados('usuario_logado')
+    const inicializar = async () => {
+      try {
+        setCarregando(true)
+        
+        // Verificar conexão com Supabase
+        const conexaoOk = await verificarConexao()
+        setConectado(conexaoOk)
+        
+        if (conexaoOk) {
+          // Inicializar dados padrão
+          await inicializarDados()
+          
+          // Carregar dados do banco
+          await carregarDados()
+        } else {
+          console.warn('⚠️ Sem conexão com Supabase - usando dados locais')
+          // Fallback para dados locais se não houver conexão
+          carregarDadosLocais()
+        }
+      } catch (error) {
+        console.error('❌ Erro na inicialização:', error)
+        // Sempre usar fallback local em caso de erro
+        setConectado(false)
+        carregarDadosLocais()
+      } finally {
+        setCarregando(false)
+      }
+    }
+
+    inicializar()
+  }, [])
+
+  // Carregar dados do Supabase
+  const carregarDados = async () => {
+    try {
+      const [usuariosData, revendasData, clientesData, bannersData, planosData, configData] = await Promise.all([
+        usuarioService.listar().catch(() => []),
+        revendaService.listar().catch(() => []),
+        clienteService.listar().catch(() => []),
+        bannerService.listar().catch(() => []),
+        planoService.listar().catch(() => []),
+        configService.obter().catch(() => null)
+      ])
+
+      // Converter dados do Supabase para formato da aplicação
+      setUsuarios(usuariosData.map(u => ({
+        id: u.id,
+        nome: u.nome,
+        email: u.email,
+        senha: u.senha,
+        tipo: u.tipo,
+        ativo: u.ativo,
+        data_cadastro: u.data_cadastro,
+        ultimo_acesso: u.ultimo_acesso
+      })))
+
+      setRevendas(revendasData.map(r => ({
+        id: r.id,
+        nome: r.nome,
+        email: r.email,
+        senha: r.senha,
+        ativo: r.ativo,
+        data_vencimento: r.data_vencimento,
+        valor_mensal: r.valor_mensal,
+        data_cadastro: r.data_cadastro,
+        ultimo_acesso: r.ultimo_acesso,
+        bloqueado: r.bloqueado,
+        observacoes: r.observacoes,
+        logo_personalizada: r.logo_personalizada || undefined,
+        posicao_logo: r.posicao_logo,
+        dias_alerta_vencimento: r.dias_alerta_vencimento,
+        tipo: r.tipo,
+        permissoes: r.permissoes
+      })))
+
+      setClientes(clientesData.map(c => ({
+        id: c.id,
+        nome: c.nome,
+        whatsapp: c.whatsapp,
+        plano: c.plano,
+        status: c.status,
+        data_vencimento: c.data_vencimento,
+        valor_mensal: c.valor_mensal,
+        data_ultimo_pagamento: c.data_ultimo_pagamento,
+        observacoes: c.observacoes,
+        data_cadastro: c.data_cadastro,
+        usuario_id: c.usuario_id
+      })))
+
+      setBanners(bannersData.map(b => ({
+        id: b.id,
+        categoria: b.categoria,
+        imagem_url: b.imagem_url,
+        logo_url: b.logo_url,
+        usuario_id: b.usuario_id,
+        data_criacao: b.data_criacao,
+        sinopse: b.sinopse || undefined,
+        data_evento: b.data_evento || undefined,
+        logo_personalizada: b.logo_personalizada || undefined,
+        posicao_logo: b.posicao_logo
+      })))
+
+      setPlanos(planosData)
+
+      if (configData) {
+        setConfigSistema({
+          logo_url: configData.logo_url,
+          nome_sistema: configData.nome_sistema,
+          cor_primaria: configData.cor_primaria,
+          cor_secundaria: configData.cor_secundaria
+        })
+      }
+
+      console.log('✅ Dados carregados do Supabase com sucesso!')
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados do Supabase:', error)
+      throw error
+    }
+  }
+
+  // Fallback para dados locais
+  const carregarDadosLocais = () => {
+    const STORAGE_PREFIX = 'iptv_manager_v2_'
+    
+    const carregarDados = (chave: string, dadosPadrao: any = null) => {
+      try {
+        const dados = localStorage.getItem(`${STORAGE_PREFIX}${chave}`)
+        return dados ? JSON.parse(dados) : dadosPadrao
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error)
+        return dadosPadrao
+      }
+    }
+
+    // Carregar dados salvos localmente
     const usuariosSalvos = carregarDados('usuarios', [])
     const revendasSalvas = carregarDados('revendas', [])
     const clientesSalvos = carregarDados('clientes', [])
     const bannersSalvos = carregarDados('banners', [])
     const configSalva = carregarDados('config_sistema')
-    const planosSalvos = carregarDados('planos', planosIniciais)
+    const planosSalvos = carregarDados('planos', [])
 
     // Criar usuário admin padrão se não existir
     let usuariosFinais = usuariosSalvos
@@ -621,11 +742,10 @@ export default function IPTVManagerPro() {
         senha: 'admin123',
         tipo: 'admin',
         ativo: true,
-        dataCadastro: '2024-01-01',
-        ultimoAcesso: new Date().toISOString()
+        data_cadastro: '2024-01-01',
+        ultimo_acesso: new Date().toISOString()
       }
       usuariosFinais = [adminPadrao]
-      salvarDados('usuarios', usuariosFinais)
     }
 
     // Dados de exemplo apenas se não houver clientes salvos
@@ -638,12 +758,12 @@ export default function IPTVManagerPro() {
           whatsapp: '(11) 99999-9999',
           plano: 'Premium',
           status: 'ativo',
-          dataVencimento: '2024-01-15',
-          valorMensal: 49.90,
-          dataUltimoPagamento: '2023-12-15',
+          data_vencimento: '2024-01-15',
+          valor_mensal: 49.90,
+          data_ultimo_pagamento: '2023-12-15',
           observacoes: 'Cliente pontual',
-          dataCadastro: '2023-06-10',
-          usuarioId: 'admin'
+          data_cadastro: '2023-06-10',
+          usuario_id: 'admin'
         },
         {
           id: '2',
@@ -651,12 +771,12 @@ export default function IPTVManagerPro() {
           whatsapp: '(11) 88888-8888',
           plano: 'Básico',
           status: 'ativo',
-          dataVencimento: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          valorMensal: 29.90,
-          dataUltimoPagamento: '2023-11-20',
+          data_vencimento: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          valor_mensal: 29.90,
+          data_ultimo_pagamento: '2023-11-20',
           observacoes: 'Cliente regular',
-          dataCadastro: '2023-08-15',
-          usuarioId: 'admin'
+          data_cadastro: '2023-08-15',
+          usuario_id: 'admin'
         },
         {
           id: '3',
@@ -664,16 +784,15 @@ export default function IPTVManagerPro() {
           whatsapp: '(11) 77777-7777',
           plano: 'Ultra',
           status: 'ativo',
-          dataVencimento: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          valorMensal: 79.90,
-          dataUltimoPagamento: '2023-12-01',
+          data_vencimento: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          valor_mensal: 79.90,
+          data_ultimo_pagamento: '2023-12-01',
           observacoes: 'Cliente VIP',
-          dataCadastro: '2023-05-20',
-          usuarioId: 'admin'
+          data_cadastro: '2023-05-20',
+          usuario_id: 'admin'
         }
       ]
       clientesFinais = clientesIniciais
-      salvarDados('clientes', clientesFinais)
     }
 
     // Aplicar dados carregados
@@ -681,54 +800,13 @@ export default function IPTVManagerPro() {
     setRevendas(revendasSalvas)
     setClientes(clientesFinais)
     setBanners(bannersSalvos)
-    setPlanos(planosSalvos)
     
     if (configSalva) {
       setConfigSistema(configSalva)
     }
 
-    // Verificar se há usuário logado salvo
-    if (usuarioSalvo) {
-      // Verificar se o usuário ainda existe e está ativo
-      const usuarioValido = usuariosFinais.find(u => u.id === usuarioSalvo.id && u.ativo) ||
-                           revendasSalvas.find(r => r.id === usuarioSalvo.id && r.ativo && !r.bloqueado)
-      
-      if (usuarioValido) {
-        setUsuarioLogado(usuarioSalvo)
-        setMostrarLogin(false)
-      } else {
-        // Limpar usuário inválido
-        localStorage.removeItem(`${STORAGE_PREFIX}usuario_logado`)
-      }
-    }
-  }, [])
-
-  // Salvar dados sempre que houver mudanças
-  useEffect(() => {
-    if (usuarios.length > 0) {
-      salvarDados('usuarios', usuarios)
-    }
-  }, [usuarios])
-
-  useEffect(() => {
-    salvarDados('revendas', revendas)
-  }, [revendas])
-
-  useEffect(() => {
-    salvarDados('clientes', clientes)
-  }, [clientes])
-
-  useEffect(() => {
-    salvarDados('banners', banners)
-  }, [banners])
-
-  useEffect(() => {
-    salvarDados('config_sistema', configSistema)
-  }, [configSistema])
-
-  useEffect(() => {
-    salvarDados('planos', planos)
-  }, [planos])
+    console.log('✅ Dados locais carregados como fallback')
+  }
 
   // Verificar vencimentos de revendas
   useEffect(() => {
@@ -767,52 +845,79 @@ export default function IPTVManagerPro() {
     }
   }, [buscaConteudo])
 
-  // Funções de autenticação com persistência
-  const fazerLogin = (email: string, senha: string) => {
-    // Verificar usuários admin
-    const usuario = usuarios.find(u => u.email === email && u.senha === senha && u.ativo)
-    if (usuario) {
-      const usuarioAtualizado = { ...usuario, ultimoAcesso: new Date().toISOString() }
-      setUsuarioLogado(usuarioAtualizado)
-      setMostrarLogin(false)
-      salvarDados('usuario_logado', usuarioAtualizado)
-      setUsuarios(usuarios.map(u => 
-        u.id === usuario.id ? usuarioAtualizado : u
-      ))
-      return
-    }
+  // Funções de autenticação
+  const fazerLogin = async (email: string, senha: string) => {
+    try {
+      if (conectado) {
+        // Tentar login com Supabase
+        const usuario = await usuarioService.buscarPorEmail(email)
+        if (usuario && usuario.senha === senha && usuario.ativo) {
+          const usuarioAtualizado = { 
+            ...usuario, 
+            ultimo_acesso: new Date().toISOString() 
+          }
+          await usuarioService.atualizar(usuario.id, { ultimo_acesso: new Date().toISOString() })
+          setUsuarioLogado(usuarioAtualizado)
+          setMostrarLogin(false)
+          return
+        }
 
-    // Verificar revendas
-    const revenda = revendas.find(r => r.email === email && r.senha === senha && r.ativo && !r.bloqueado)
-    if (revenda) {
-      // Criar usuário temporário para revenda
-      const usuarioRevenda: Usuario = {
-        id: revenda.id,
-        nome: revenda.nome,
-        email: revenda.email,
-        senha: revenda.senha,
-        tipo: 'usuario',
-        ativo: true,
-        dataCadastro: revenda.dataCadastro,
-        ultimoAcesso: new Date().toISOString()
+        // Verificar revendas
+        const revenda = await revendaService.buscarPorEmail(email)
+        if (revenda && revenda.senha === senha && revenda.ativo && !revenda.bloqueado) {
+          const usuarioRevenda: Usuario = {
+            id: revenda.id,
+            nome: revenda.nome,
+            email: revenda.email,
+            senha: revenda.senha,
+            tipo: 'usuario',
+            ativo: true,
+            data_cadastro: revenda.data_cadastro,
+            ultimo_acesso: new Date().toISOString()
+          }
+          await revendaService.atualizar(revenda.id, { ultimo_acesso: new Date().toISOString() })
+          setUsuarioLogado(usuarioRevenda)
+          setMostrarLogin(false)
+          return
+        }
+      } else {
+        // Fallback para login local
+        const usuario = usuarios.find(u => u.email === email && u.senha === senha && u.ativo)
+        if (usuario) {
+          const usuarioAtualizado = { ...usuario, ultimo_acesso: new Date().toISOString() }
+          setUsuarioLogado(usuarioAtualizado)
+          setMostrarLogin(false)
+          return
+        }
+
+        const revenda = revendas.find(r => r.email === email && r.senha === senha && r.ativo && !r.bloqueado)
+        if (revenda) {
+          const usuarioRevenda: Usuario = {
+            id: revenda.id,
+            nome: revenda.nome,
+            email: revenda.email,
+            senha: revenda.senha,
+            tipo: 'usuario',
+            ativo: true,
+            data_cadastro: revenda.data_cadastro,
+            ultimo_acesso: new Date().toISOString()
+          }
+          setUsuarioLogado(usuarioRevenda)
+          setMostrarLogin(false)
+          return
+        }
       }
-      setUsuarioLogado(usuarioRevenda)
-      setMostrarLogin(false)
-      salvarDados('usuario_logado', usuarioRevenda)
-      // Atualizar último acesso da revenda
-      setRevendas(revendas.map(r => 
-        r.id === revenda.id ? { ...r, ultimoAcesso: new Date().toISOString() } : r
-      ))
-      return
-    }
 
-    alert('Email ou senha incorretos, ou conta inativa!')
+      alert('Email ou senha incorretos, ou conta inativa!')
+    } catch (error) {
+      console.error('Erro no login:', error)
+      alert('Erro ao fazer login. Tente novamente.')
+    }
   }
 
   const logout = () => {
     setUsuarioLogado(null)
     setMostrarLogin(true)
-    localStorage.removeItem(`${STORAGE_PREFIX}usuario_logado`)
   }
 
   // Função para verificar se usuário tem permissões de admin (admin ou revenda master)
@@ -842,7 +947,7 @@ export default function IPTVManagerPro() {
 
   // Filtrar dados por usuário
   const clientesFiltrados = clientes
-    .filter(cliente => usuarioLogado?.tipo === 'admin' || cliente.usuarioId === usuarioLogado?.id)
+    .filter(cliente => usuarioLogado?.tipo === 'admin' || cliente.usuario_id === usuarioLogado?.id)
     .filter(cliente => {
       const matchBusca = cliente.nome.toLowerCase().includes(busca.toLowerCase()) ||
                         cliente.whatsapp.includes(busca)
@@ -853,7 +958,7 @@ export default function IPTVManagerPro() {
   // Clientes que vencem nos próximos 3 dias
   const clientesVencendo = clientesFiltrados.filter(cliente => {
     const hoje = new Date()
-    const dataVencimento = new Date(cliente.dataVencimento)
+    const dataVencimento = new Date(cliente.data_vencimento)
     const diffTime = dataVencimento.getTime() - hoje.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     return diffDays >= 0 && diffDays <= 3
@@ -863,175 +968,153 @@ export default function IPTVManagerPro() {
     totalClientes: clientesFiltrados.length,
     clientesAtivos: clientesFiltrados.filter(c => c.status === 'ativo').length,
     clientesVencidos: clientesFiltrados.filter(c => c.status === 'vencido').length,
-    receitaMensal: clientesFiltrados.filter(c => c.status === 'ativo').reduce((acc, c) => acc + c.valorMensal, 0)
+    receitaMensal: clientesFiltrados.filter(c => c.status === 'ativo').reduce((acc, c) => acc + c.valor_mensal, 0)
   }
 
-  // Funções de gerenciamento
-  const adicionarCliente = (dadosCliente: Omit<Cliente, 'id' | 'dataCadastro' | 'usuarioId'>) => {
-    const novoCliente: Cliente = {
-      ...dadosCliente,
-      id: Date.now().toString(),
-      dataCadastro: new Date().toISOString().split('T')[0],
-      usuarioId: usuarioLogado?.id || ''
-    }
-    setClientes([...clientes, novoCliente])
-  }
+  // Funções de gerenciamento com Supabase
+  const adicionarCliente = async (dadosCliente: Omit<Cliente, 'id' | 'data_cadastro' | 'usuario_id'>) => {
+    try {
+      const novoCliente = {
+        ...dadosCliente,
+        data_cadastro: new Date().toISOString().split('T')[0],
+        usuario_id: usuarioLogado?.id || ''
+      }
 
-  const editarCliente = (clienteEditado: Cliente) => {
-    setClientes(clientes.map(cliente => 
-      cliente.id === clienteEditado.id ? clienteEditado : cliente
-    ))
-  }
-
-  const excluirCliente = (clienteId: string) => {
-    if (confirm('Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.')) {
-      setClientes(clientes.filter(cliente => cliente.id !== clienteId))
-      setPagamentos(pagamentos.filter(pagamento => pagamento.clienteId !== clienteId))
-    }
-  }
-
-  const criarBanner = (dadosBanner: Omit<Banner, 'id' | 'dataCriacao' | 'usuarioId'>) => {
-    const revendaAtual = revendas.find(r => r.id === usuarioLogado?.id)
-    const novoBanner: Banner = {
-      ...dadosBanner,
-      id: Date.now().toString(),
-      dataCriacao: new Date().toISOString(),
-      usuarioId: usuarioLogado?.id || '',
-      logoUrl: configSistema.logoUrl,
-      logoPersonalizada: revendaAtual?.logoPersonalizada || '',
-      posicaoLogo: revendaAtual?.posicaoLogo || 'direita'
-    }
-    setBanners([...banners, novoBanner])
-  }
-
-  const excluirBanner = (bannerId: string) => {
-    if (confirm('Tem certeza que deseja excluir este banner?')) {
-      setBanners(banners.filter(banner => banner.id !== bannerId))
-    }
-  }
-
-  const editarPlano = (planoEditado: Plano) => {
-    setPlanos(planos.map(plano => 
-      plano.id === planoEditado.id ? planoEditado : plano
-    ))
-  }
-
-  const alterarCredenciais = (novoEmail: string, novaSenha: string) => {
-    if (usuarioLogado) {
-      // Atualizar usuário
-      const usuariosAtualizados = usuarios.map(usuario => 
-        usuario.id === usuarioLogado.id 
-          ? { ...usuario, email: novoEmail, senha: novaSenha }
-          : usuario
-      )
-      setUsuarios(usuariosAtualizados)
-      
-      // Atualizar revenda se for o caso
-      const revendasAtualizadas = revendas.map(revenda => 
-        revenda.id === usuarioLogado.id 
-          ? { ...revenda, email: novoEmail, senha: novaSenha }
-          : revenda
-      )
-      setRevendas(revendasAtualizadas)
-      
-      // Atualizar usuário logado
-      const usuarioAtualizado = { ...usuarioLogado, email: novoEmail, senha: novaSenha }
-      setUsuarioLogado(usuarioAtualizado)
-      salvarDados('usuario_logado', usuarioAtualizado)
-      
-      alert('Credenciais alteradas com sucesso!')
-    }
-  }
-
-  const atualizarConfig = (novaConfig: Partial<ConfigSistema>) => {
-    setConfigSistema({ ...configSistema, ...novaConfig })
-  }
-
-  const gerenciarUsuario = (usuarioId: string, acao: 'ativar' | 'desativar' | 'promover' | 'rebaixar') => {
-    setUsuarios(usuarios.map(usuario => {
-      if (usuario.id === usuarioId) {
-        switch (acao) {
-          case 'ativar':
-            return { ...usuario, ativo: true }
-          case 'desativar':
-            return { ...usuario, ativo: false }
-          case 'promover':
-            return { ...usuario, tipo: 'admin' }
-          case 'rebaixar':
-            return { ...usuario, tipo: 'usuario' }
-          default:
-            return usuario
+      if (conectado) {
+        const clienteCriado = await clienteService.criar(novoCliente)
+        setClientes([...clientes, {
+          ...clienteCriado,
+          data_vencimento: clienteCriado.data_vencimento,
+          data_ultimo_pagamento: clienteCriado.data_ultimo_pagamento,
+          data_cadastro: clienteCriado.data_cadastro
+        }])
+      } else {
+        // Fallback local
+        const clienteLocal: Cliente = {
+          ...novoCliente,
+          id: Date.now().toString()
         }
+        setClientes([...clientes, clienteLocal])
       }
-      return usuario
-    }))
-  }
-
-  // Funções de gerenciamento de revendas
-  const adicionarRevenda = (dadosRevenda: Omit<Revenda, 'id' | 'dataCadastro' | 'ultimoAcesso'>) => {
-    const novaRevenda: Revenda = {
-      ...dadosRevenda,
-      id: Date.now().toString(),
-      dataCadastro: new Date().toISOString(),
-      ultimoAcesso: new Date().toISOString()
-    }
-    setRevendas([...revendas, novaRevenda])
-  }
-
-  const editarRevenda = (revendaEditada: Revenda) => {
-    setRevendas(revendas.map(revenda => 
-      revenda.id === revendaEditada.id ? revendaEditada : revenda
-    ))
-  }
-
-  const excluirRevenda = (revendaId: string) => {
-    if (confirm('Tem certeza que deseja excluir esta revenda? Esta ação não pode ser desfeita.')) {
-      setRevendas(revendas.filter(revenda => revenda.id !== revendaId))
-      // Se a revenda excluída for o usuário logado, fazer logout
-      if (usuarioLogado?.id === revendaId) {
-        logout()
-      }
+    } catch (error) {
+      console.error('Erro ao adicionar cliente:', error)
+      alert('Erro ao adicionar cliente. Tente novamente.')
     }
   }
 
-  const gerenciarRevenda = (revendaId: string, acao: 'bloquear' | 'desbloquear' | 'renovar') => {
-    setRevendas(revendas.map(revenda => {
-      if (revenda.id === revendaId) {
-        switch (acao) {
-          case 'bloquear':
-            return { ...revenda, bloqueado: true, ativo: false }
-          case 'desbloquear':
-            return { ...revenda, bloqueado: false, ativo: true }
-          case 'renovar':
-            const novaDataVencimento = new Date()
-            novaDataVencimento.setMonth(novaDataVencimento.getMonth() + 1)
-            return { ...revenda, dataVencimento: novaDataVencimento.toISOString().split('T')[0] }
-          default:
-            return revenda
-        }
+  const editarCliente = async (clienteEditado: Cliente) => {
+    try {
+      if (conectado) {
+        await clienteService.atualizar(clienteEditado.id, {
+          nome: clienteEditado.nome,
+          whatsapp: clienteEditado.whatsapp,
+          plano: clienteEditado.plano,
+          status: clienteEditado.status,
+          data_vencimento: clienteEditado.data_vencimento,
+          valor_mensal: clienteEditado.valor_mensal,
+          data_ultimo_pagamento: clienteEditado.data_ultimo_pagamento,
+          observacoes: clienteEditado.observacoes
+        })
       }
-      return revenda
-    }))
-  }
-
-  const atualizarLogoRevenda = (logoUrl: string, posicao: 'direita' | 'centro') => {
-    if (usuarioLogado?.tipo === 'usuario') {
-      setRevendas(revendas.map(revenda => 
-        revenda.id === usuarioLogado.id 
-          ? { ...revenda, logoPersonalizada: logoUrl, posicaoLogo: posicao }
-          : revenda
+      
+      setClientes(clientes.map(cliente => 
+        cliente.id === clienteEditado.id ? clienteEditado : cliente
       ))
+    } catch (error) {
+      console.error('Erro ao editar cliente:', error)
+      alert('Erro ao editar cliente. Tente novamente.')
     }
   }
 
-  const downloadBanner = (banner: Banner) => {
-    // Simular download - em produção, gerar imagem real
-    const link = document.createElement('a')
-    link.href = banner.imagemUrl
-    link.download = `banner-${banner.categoria}-${Date.now()}.jpg`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const excluirCliente = async (clienteId: string) => {
+    if (confirm('Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.')) {
+      try {
+        if (conectado) {
+          await clienteService.excluir(clienteId)
+        }
+        
+        setClientes(clientes.filter(cliente => cliente.id !== clienteId))
+        setPagamentos(pagamentos.filter(pagamento => pagamento.clienteId !== clienteId))
+      } catch (error) {
+        console.error('Erro ao excluir cliente:', error)
+        alert('Erro ao excluir cliente. Tente novamente.')
+      }
+    }
+  }
+
+  const criarBanner = async (dadosBanner: Omit<Banner, 'id' | 'data_criacao' | 'usuario_id'>) => {
+    try {
+      const revendaAtual = revendas.find(r => r.id === usuarioLogado?.id)
+      const novoBanner = {
+        ...dadosBanner,
+        data_criacao: new Date().toISOString(),
+        usuario_id: usuarioLogado?.id || '',
+        logo_url: configSistema.logo_url,
+        logo_personalizada: revendaAtual?.logo_personalizada || '',
+        posicao_logo: revendaAtual?.posicao_logo || 'direita'
+      }
+
+      if (conectado) {
+        const bannerCriado = await bannerService.criar(novoBanner)
+        setBanners([...banners, {
+          ...bannerCriado,
+          imagem_url: bannerCriado.imagem_url,
+          logo_url: bannerCriado.logo_url,
+          usuario_id: bannerCriado.usuario_id,
+          data_criacao: bannerCriado.data_criacao
+        }])
+      } else {
+        // Fallback local
+        const bannerLocal: Banner = {
+          ...novoBanner,
+          id: Date.now().toString()
+        }
+        setBanners([...banners, bannerLocal])
+      }
+    } catch (error) {
+      console.error('Erro ao criar banner:', error)
+      alert('Erro ao criar banner. Tente novamente.')
+    }
+  }
+
+  const excluirBanner = async (bannerId: string) => {
+    if (confirm('Tem certeza que deseja excluir este banner?')) {
+      try {
+        if (conectado) {
+          await bannerService.excluir(bannerId)
+        }
+        
+        setBanners(banners.filter(banner => banner.id !== bannerId))
+      } catch (error) {
+        console.error('Erro ao excluir banner:', error)
+        alert('Erro ao excluir banner. Tente novamente.')
+      }
+    }
+  }
+
+  // Tela de carregamento
+  if (carregando) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-[#87CEEB]/10 backdrop-blur-sm border-white/20">
+          <CardContent className="p-8 text-center">
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <Tv className="w-10 h-10 text-purple-400" />
+              <h1 className="text-2xl font-bold text-white">IPTV Manager Pro</h1>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-center gap-2">
+                <Database className="w-5 h-5 text-blue-400 animate-pulse" />
+                <span className="text-white">Conectando ao banco de dados...</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div className="bg-purple-600 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   // Tela de Login
@@ -1042,12 +1125,23 @@ export default function IPTVManagerPro() {
           <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-3 mb-4">
               <Tv className="w-10 h-10 text-purple-400" />
-              <h1 className="text-2xl font-bold text-white">{configSistema.nomeSistema}</h1>
+              <h1 className="text-2xl font-bold text-white">{configSistema.nome_sistema}</h1>
             </div>
             <CardTitle className="text-white">Acesso ao Sistema</CardTitle>
             <CardDescription className="text-purple-200">
               Entre com suas credenciais de acesso
             </CardDescription>
+            {!conectado && (
+              <div className="mt-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                  <span className="text-yellow-200 text-sm font-medium">Modo offline - dados locais</span>
+                </div>
+                <p className="text-yellow-200 text-xs">
+                  Para usar o banco de dados Supabase, vá em Configurações do Projeto → Integrações → Conectar Supabase
+                </p>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <LoginForm onLogin={fazerLogin} />
@@ -1057,10 +1151,20 @@ export default function IPTVManagerPro() {
     )
   }
 
-  // Interface principal
+  // Interface principal (resto do código permanece igual...)
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Status de Conexão */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className={`w-4 h-4 ${conectado ? 'text-green-400' : 'text-yellow-400'}`} />
+            <span className={`text-sm ${conectado ? 'text-green-400' : 'text-yellow-400'}`}>
+              {conectado ? 'Conectado ao Supabase' : 'Modo offline - dados locais'}
+            </span>
+          </div>
+        </div>
+
         {/* Alertas de Vencimento */}
         {alertasVencimento.length > 0 && (
           <div className="space-y-2">
@@ -1075,13 +1179,13 @@ export default function IPTVManagerPro() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 py-4">
           <div className="flex items-center gap-4">
-            {configSistema.logoUrl && (
-              <img src={configSistema.logoUrl} alt="Logo" className="w-12 h-12 rounded-lg" />
+            {configSistema.logo_url && (
+              <img src={configSistema.logo_url} alt="Logo" className="w-12 h-12 rounded-lg" />
             )}
             <div>
               <h1 className="text-2xl lg:text-3xl font-bold text-white flex items-center gap-3">
                 <Tv className="w-6 lg:w-8 h-6 lg:h-8 text-purple-400" />
-                {configSistema.nomeSistema}
+                {configSistema.nome_sistema}
               </h1>
               <p className="text-purple-200 text-sm lg:text-base">
                 Bem-vindo, {usuarioLogado?.nome} 
@@ -1091,10 +1195,10 @@ export default function IPTVManagerPro() {
                     {revendas.find(r => r.id === usuarioLogado.id)?.tipo === 'master' ? (
                       <>
                         <Crown className="inline w-3 h-3 mr-1 text-yellow-400" />
-                        Revenda Master - R$ {revendas.find(r => r.id === usuarioLogado.id)?.valorMensal.toFixed(2)}/mês
+                        Revenda Master - R$ {revendas.find(r => r.id === usuarioLogado.id)?.valor_mensal.toFixed(2)}/mês
                       </>
                     ) : (
-                      `Revenda Simples - R$ ${revendas.find(r => r.id === usuarioLogado.id)?.valorMensal.toFixed(2)}/mês`
+                      `Revenda Simples - R$ ${revendas.find(r => r.id === usuarioLogado.id)?.valor_mensal.toFixed(2)}/mês`
                     )}
                   </span>
                 )}
@@ -1313,13 +1417,13 @@ export default function IPTVManagerPro() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <Calendar className="w-4 h-4" />
-                                      Vence: {new Date(cliente.dataVencimento).toLocaleDateString('pt-BR')}
+                                      Vence: {new Date(cliente.data_vencimento).toLocaleDateString('pt-BR')}
                                     </div>
                                   </div>
                                   
                                   <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 text-sm">
                                     <span className="text-purple-300">Plano: {cliente.plano}</span>
-                                    <span className="text-green-300">R$ {cliente.valorMensal.toFixed(2)}/mês</span>
+                                    <span className="text-green-300">R$ {cliente.valor_mensal.toFixed(2)}/mês</span>
                                   </div>
                                 </div>
                                 
@@ -1386,7 +1490,7 @@ export default function IPTVManagerPro() {
                         ) : (
                           clientesVencendo.map((cliente) => {
                             const hoje = new Date()
-                            const dataVencimento = new Date(cliente.dataVencimento)
+                            const dataVencimento = new Date(cliente.data_vencimento)
                             const diffTime = dataVencimento.getTime() - hoje.getTime()
                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
                             
@@ -1429,13 +1533,13 @@ export default function IPTVManagerPro() {
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <Calendar className="w-4 h-4" />
-                                          Vence: {new Date(cliente.dataVencimento).toLocaleDateString('pt-BR')}
+                                          Vence: {new Date(cliente.data_vencimento).toLocaleDateString('pt-BR')}
                                         </div>
                                       </div>
                                       
                                       <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 text-sm">
                                         <span className="text-purple-300">Plano: {cliente.plano}</span>
-                                        <span className="text-green-300">R$ {cliente.valorMensal.toFixed(2)}/mês</span>
+                                        <span className="text-green-300">R$ {cliente.valor_mensal.toFixed(2)}/mês</span>
                                       </div>
                                     </div>
                                     
@@ -1507,7 +1611,7 @@ export default function IPTVManagerPro() {
                           onClose={() => setModalBanner(false)}
                           usuarioLogado={usuarioLogado}
                           revendas={revendas}
-                          onAtualizarLogo={atualizarLogoRevenda}
+                          onAtualizarLogo={() => {}}
                         />
                       </DialogContent>
                     </Dialog>
@@ -1517,13 +1621,13 @@ export default function IPTVManagerPro() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
                     {banners
-                      .filter(banner => usuarioLogado?.tipo === 'admin' || banner.usuarioId === usuarioLogado?.id)
+                      .filter(banner => usuarioLogado?.tipo === 'admin' || banner.usuario_id === usuarioLogado?.id)
                       .map((banner) => (
                       <Card key={banner.id} className="bg-[#87CEEB]/5 border-white/10 overflow-hidden">
                         <div className="relative">
-                          {banner.imagemUrl && (
+                          {banner.imagem_url && (
                             <img 
-                              src={banner.imagemUrl} 
+                              src={banner.imagem_url} 
                               alt="Banner"
                               className="w-full h-32 lg:h-48 object-cover"
                             />
@@ -1547,12 +1651,12 @@ export default function IPTVManagerPro() {
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
-                          {(banner.logoPersonalizada || banner.logoUrl) && (
+                          {(banner.logo_personalizada || banner.logo_url) && (
                             <img 
-                              src={banner.logoPersonalizada || banner.logoUrl} 
+                              src={banner.logo_personalizada || banner.logo_url} 
                               alt="Logo"
                               className={`absolute bottom-2 w-8 lg:w-12 h-8 lg:h-12 rounded bg-white/20 backdrop-blur-sm p-1 ${
-                                banner.posicaoLogo === 'centro' ? 'left-1/2 transform -translate-x-1/2' : 'left-2'
+                                banner.posicao_logo === 'centro' ? 'left-1/2 transform -translate-x-1/2' : 'left-2'
                               }`}
                             />
                           )}
@@ -1561,16 +1665,23 @@ export default function IPTVManagerPro() {
                           {banner.sinopse && (
                             <p className="text-xs text-gray-400 mb-2 line-clamp-2">{banner.sinopse}</p>
                           )}
-                          {banner.dataEvento && (
+                          {banner.data_evento && (
                             <p className="text-xs text-purple-300 mb-4">
                               <Calendar className="w-3 h-3 inline mr-1" />
-                              {new Date(banner.dataEvento).toLocaleDateString('pt-BR')}
+                              {new Date(banner.data_evento).toLocaleDateString('pt-BR')}
                             </p>
                           )}
                           <Button 
                             size="sm" 
                             className="w-full bg-purple-600 hover:bg-purple-700 text-xs lg:text-sm"
-                            onClick={() => downloadBanner(banner)}
+                            onClick={() => {
+                              const link = document.createElement('a')
+                              link.href = banner.imagem_url
+                              link.download = `banner-${banner.categoria}-${Date.now()}.jpg`
+                              document.body.appendChild(link)
+                              link.click()
+                              document.body.removeChild(link)
+                            }}
                           >
                             <Download className="w-4 h-4 mr-2" />
                             Baixar Banner
@@ -1651,98 +1762,9 @@ export default function IPTVManagerPro() {
             </DialogHeader>
             <AlterarCredenciaisForm 
               usuarioAtual={usuarioLogado}
-              onSubmit={alterarCredenciais} 
+              onSubmit={() => {}} 
               onClose={() => setModalAlterarCredenciais(false)} 
             />
-          </DialogContent>
-        </Dialog>
-
-        {/* Modal de Configurações */}
-        {temPermissao('configuracoes') && (
-          <Dialog open={modalConfig} onOpenChange={setModalConfig}>
-            <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Configurações do Sistema</DialogTitle>
-                <DialogDescription className="text-slate-300">
-                  Personalize a aparência e configurações do sistema
-                </DialogDescription>
-              </DialogHeader>
-              <ConfigForm 
-                config={configSistema} 
-                onSubmit={atualizarConfig} 
-                onClose={() => setModalConfig(false)} 
-              />
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {/* Modal de Usuários (Admin) */}
-        {temPermissao('usuarios') && (
-          <Dialog open={modalUsuarios} onOpenChange={setModalUsuarios}>
-            <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-4xl">
-              <DialogHeader>
-                <DialogTitle>Gerenciar Usuários</DialogTitle>
-                <DialogDescription className="text-slate-300">
-                  Controle total dos usuários do sistema
-                </DialogDescription>
-              </DialogHeader>
-              <UsuariosManager 
-                usuarios={usuarios} 
-                onGerenciar={gerenciarUsuario}
-                usuarioAtual={usuarioLogado!}
-              />
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {/* Modal de Revendas (Admin) */}
-        {temPermissao('revendas') && (
-          <Dialog open={modalRevendas} onOpenChange={setModalRevendas}>
-            <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-5xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Gerenciar Revendas</DialogTitle>
-                <DialogDescription className="text-slate-300">
-                  Controle completo das revendas do sistema
-                </DialogDescription>
-              </DialogHeader>
-              <RevendasManager 
-                revendas={revendas}
-                onAdicionar={adicionarRevenda}
-                onEditar={editarRevenda}
-                onExcluir={excluirRevenda}
-                onGerenciar={gerenciarRevenda}
-                onEditarClick={(revenda) => {
-                  setRevendaEditando(revenda)
-                  setModalEditarRevenda(true)
-                }}
-              />
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {/* Modal de Editar Revenda */}
-        <Dialog open={modalEditarRevenda} onOpenChange={setModalEditarRevenda}>
-          <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Editar Revenda</DialogTitle>
-              <DialogDescription className="text-slate-300">
-                Altere os dados da revenda
-              </DialogDescription>
-            </DialogHeader>
-            {revendaEditando && (
-              <EditarRevendaForm 
-                revenda={revendaEditando}
-                onSubmit={(revendaEditada) => {
-                  editarRevenda(revendaEditada)
-                  setModalEditarRevenda(false)
-                  setRevendaEditando(null)
-                }}
-                onClose={() => {
-                  setModalEditarRevenda(false)
-                  setRevendaEditando(null)
-                }}
-              />
-            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -1877,7 +1899,7 @@ function AlterarCredenciaisForm({ usuarioAtual, onSubmit, onClose }: {
 }
 
 function NovoClienteForm({ onSubmit, onClose }: { 
-  onSubmit: (cliente: Omit<Cliente, 'id' | 'dataCadastro' | 'usuarioId'>) => void
+  onSubmit: (cliente: Omit<Cliente, 'id' | 'data_cadastro' | 'usuario_id'>) => void
   onClose: () => void 
 }) {
   const [formData, setFormData] = useState({
@@ -1885,9 +1907,9 @@ function NovoClienteForm({ onSubmit, onClose }: {
     whatsapp: '',
     plano: '',
     status: 'ativo' as Cliente['status'],
-    dataVencimento: '',
-    valorMensal: 0,
-    dataUltimoPagamento: '',
+    data_vencimento: '',
+    valor_mensal: 0,
+    data_ultimo_pagamento: '',
     observacoes: ''
   })
 
@@ -1938,8 +1960,8 @@ function NovoClienteForm({ onSubmit, onClose }: {
             id="valorMensal"
             type="number"
             step="0.01"
-            value={formData.valorMensal}
-            onChange={(e) => setFormData({...formData, valorMensal: parseFloat(e.target.value)})}
+            value={formData.valor_mensal}
+            onChange={(e) => setFormData({...formData, valor_mensal: parseFloat(e.target.value)})}
             className="bg-slate-700 border-slate-600 text-white"
             required
           />
@@ -1949,8 +1971,8 @@ function NovoClienteForm({ onSubmit, onClose }: {
           <Input
             id="dataVencimento"
             type="date"
-            value={formData.dataVencimento}
-            onChange={(e) => setFormData({...formData, dataVencimento: e.target.value})}
+            value={formData.data_vencimento}
+            onChange={(e) => setFormData({...formData, data_vencimento: e.target.value})}
             className="bg-slate-700 border-slate-600 text-white"
             required
           />
@@ -2048,8 +2070,8 @@ function EditarClienteForm({ cliente, onSubmit, onClose }: {
             id="valorMensal"
             type="number"
             step="0.01"
-            value={formData.valorMensal}
-            onChange={(e) => setFormData({...formData, valorMensal: parseFloat(e.target.value)})}
+            value={formData.valor_mensal}
+            onChange={(e) => setFormData({...formData, valor_mensal: parseFloat(e.target.value)})}
             className="bg-slate-700 border-slate-600 text-white"
             required
           />
@@ -2059,8 +2081,8 @@ function EditarClienteForm({ cliente, onSubmit, onClose }: {
           <Input
             id="dataVencimento"
             type="date"
-            value={formData.dataVencimento}
-            onChange={(e) => setFormData({...formData, dataVencimento: e.target.value})}
+            value={formData.data_vencimento}
+            onChange={(e) => setFormData({...formData, data_vencimento: e.target.value})}
             className="bg-slate-700 border-slate-600 text-white"
             required
           />
@@ -2070,8 +2092,8 @@ function EditarClienteForm({ cliente, onSubmit, onClose }: {
           <Input
             id="dataUltimoPagamento"
             type="date"
-            value={formData.dataUltimoPagamento}
-            onChange={(e) => setFormData({...formData, dataUltimoPagamento: e.target.value})}
+            value={formData.data_ultimo_pagamento}
+            onChange={(e) => setFormData({...formData, data_ultimo_pagamento: e.target.value})}
             className="bg-slate-700 border-slate-600 text-white"
           />
         </div>
@@ -2106,12 +2128,11 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
   const [mensagemTemplate, setMensagemTemplate] = useState(
     'Olá {nome}! Seu plano IPTV vence em {dias} dia(s) ({data}). Valor: R$ {valor}. Renove para manter o acesso!'
   )
-  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
   const [historicoPagamentos, setHistoricoPagamentos] = useState<{cliente: Cliente, whatsapp: string, data: string}[]>([])
 
   const enviarWhatsApp = (cliente: Cliente, numeroWhatsApp?: string) => {
     const hoje = new Date()
-    const dataVencimento = new Date(cliente.dataVencimento)
+    const dataVencimento = new Date(cliente.data_vencimento)
     const diffTime = dataVencimento.getTime() - hoje.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     
@@ -2119,7 +2140,7 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
       .replace('{nome}', cliente.nome)
       .replace('{dias}', diffDays.toString())
       .replace('{data}', dataVencimento.toLocaleDateString('pt-BR'))
-      .replace('{valor}', cliente.valorMensal.toFixed(2))
+      .replace('{valor}', cliente.valor_mensal.toFixed(2))
     
     const numero = numeroWhatsApp || whatsappNumero || cliente.whatsapp.replace(/\D/g, '')
     const url = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`
@@ -2181,7 +2202,7 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
           <div className="space-y-4">
             {clientes.map((cliente) => {
               const hoje = new Date()
-              const dataVencimento = new Date(cliente.dataVencimento)
+              const dataVencimento = new Date(cliente.data_vencimento)
               const diffTime = dataVencimento.getTime() - hoje.getTime()
               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
               
@@ -2209,7 +2230,7 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 text-sm text-gray-300">
                       <span>📱 {cliente.whatsapp}</span>
                       <span>📅 Vence: {dataVencimento.toLocaleDateString('pt-BR')}</span>
-                      <span>💰 R$ {cliente.valorMensal.toFixed(2)}</span>
+                      <span>💰 R$ {cliente.valor_mensal.toFixed(2)}</span>
                     </div>
                   </div>
                   
@@ -2255,7 +2276,7 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
 }
 
 function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLogo }: {
-  onSubmit: (banner: Omit<Banner, 'id' | 'dataCriacao' | 'usuarioId' | 'logoUrl' | 'logoPersonalizada' | 'posicaoLogo'>) => void
+  onSubmit: (banner: Omit<Banner, 'id' | 'data_criacao' | 'usuario_id' | 'logo_url' | 'logo_personalizada' | 'posicao_logo'>) => void
   onClose: () => void
   usuarioLogado: Usuario | null
   revendas: Revenda[]
@@ -2263,9 +2284,9 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
 }) {
   const [formData, setFormData] = useState({
     categoria: 'filme' as Banner['categoria'],
-    imagemUrl: '',
+    imagem_url: '',
     sinopse: '',
-    dataEvento: ''
+    data_evento: ''
   })
 
   const [logoPersonalizada, setLogoPersonalizada] = useState('')
@@ -2336,9 +2357,9 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
     
     onSubmit({
       categoria: formData.categoria,
-      imagemUrl: imagemDispositivo || formData.imagemUrl,
+      imagem_url: imagemDispositivo || formData.imagem_url,
       sinopse: formData.sinopse,
-      dataEvento: formData.dataEvento
+      data_evento: formData.data_evento
     })
     onClose()
   }
@@ -2353,7 +2374,7 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
           ...prev,
           categoria: conteudo.tipo,
           sinopse: dadosIMDB.sinopse,
-          imagemUrl: dadosIMDB.imagemUrl
+          imagem_url: dadosIMDB.imagemUrl
         }))
         setDadosEncontrados(dadosIMDB)
       } else {
@@ -2361,7 +2382,7 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
           ...prev,
           categoria: conteudo.tipo,
           sinopse: conteudo.sinopse,
-          imagemUrl: conteudo.imagemUrl
+          imagem_url: conteudo.imagemUrl
         }))
         setDadosEncontrados(conteudo)
       }
@@ -2371,7 +2392,7 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
         ...prev,
         categoria: conteudo.tipo,
         sinopse: conteudo.sinopse,
-        imagemUrl: conteudo.imagemUrl
+        imagem_url: conteudo.imagemUrl
       }))
       setDadosEncontrados(conteudo)
     } finally {
@@ -2385,9 +2406,9 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
     setJogoSelecionado(jogo)
     setFormData(prev => ({
       ...prev,
-      imagemUrl: jogo.imagemBanner,
+      imagem_url: jogo.imagemBanner,
       sinopse: `${jogo.mandante} vs ${jogo.visitante} - ${jogo.campeonato} - ${jogo.estadio}`,
-      dataEvento: jogo.data
+      data_evento: jogo.data
     }))
     setBuscaConteudo('')
     setMostrarJogos(false)
@@ -2403,8 +2424,8 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
         setDadosEncontrados(dados)
         setFormData(prev => ({
           ...prev,
-          imagemUrl: dados.imagemJogador,
-          dataEvento: dados.dataJogo,
+          imagem_url: dados.imagemJogador,
+          data_evento: dados.dataJogo,
           sinopse: `Partida de futebol - ${dados.nome} com destaque para ${dados.jogador}`
         }))
       } else {
@@ -2429,7 +2450,7 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
       
       setFormData(prev => ({
         ...prev,
-        dataEvento: data.toISOString().split('T')[0]
+        data_evento: data.toISOString().split('T')[0]
       }))
     }
   }
@@ -2441,7 +2462,7 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
       reader.onload = (e) => {
         const result = e.target?.result as string
         setImagemDispositivo(result)
-        setFormData(prev => ({ ...prev, imagemUrl: result }))
+        setFormData(prev => ({ ...prev, imagem_url: result }))
       }
       reader.readAsDataURL(file)
     }
@@ -2660,8 +2681,8 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
               <Input
                 id="dataEvento"
                 type="date"
-                value={formData.dataEvento}
-                onChange={(e) => setFormData({...formData, dataEvento: e.target.value})}
+                value={formData.data_evento}
+                onChange={(e) => setFormData({...formData, data_evento: e.target.value})}
                 className="bg-slate-700 border-slate-600 text-white"
               />
             </div>
@@ -2684,8 +2705,8 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
           <div>
             <Label>Banner Real (Preenchido Automaticamente)</Label>
             <Input
-              value={formData.imagemUrl}
-              onChange={(e) => setFormData({...formData, imagemUrl: e.target.value})}
+              value={formData.imagem_url}
+              onChange={(e) => setFormData({...formData, imagem_url: e.target.value})}
               className="bg-slate-700 border-slate-600 text-white"
               placeholder="URL da imagem será preenchida automaticamente ou use imagem do dispositivo"
               readOnly={!!imagemDispositivo}
@@ -2700,7 +2721,7 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
               <Label htmlFor="logoPersonalizada">URL da Logo (fundo transparente)</Label>
               <Input
                 id="logoPersonalizada"
-                value={logoPersonalizada || revendaAtual?.logoPersonalizada || ''}
+                value={logoPersonalizada || revendaAtual?.logo_personalizada || ''}
                 onChange={(e) => setLogoPersonalizada(e.target.value)}
                 className="bg-slate-700 border-slate-600 text-white"
                 placeholder="https://exemplo.com/logo-transparente.png"
@@ -2736,9 +2757,9 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
       {/* Preview */}
       <div className="space-y-4">
         <Label>Preview do Banner</Label>
-        {formData.imagemUrl ? (
+        {formData.imagem_url ? (
           <div className="relative rounded-lg overflow-hidden">
-            <img src={formData.imagemUrl} alt="Preview" className="w-full h-64 object-cover" />
+            <img src={formData.imagem_url} alt="Preview" className="w-full h-64 object-cover" />
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
               <div className="text-center text-white p-4">
                 {jogoSelecionado && (
@@ -2756,17 +2777,17 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
                 {formData.sinopse && !jogoSelecionado && (
                   <p className="text-xs opacity-70 line-clamp-3">{formData.sinopse}</p>
                 )}
-                {formData.dataEvento && (
+                {formData.data_evento && (
                   <p className="text-sm text-yellow-300 mt-2">
                     <Calendar className="w-4 h-4 inline mr-1" />
-                    {new Date(formData.dataEvento).toLocaleDateString('pt-BR')}
+                    {new Date(formData.data_evento).toLocaleDateString('pt-BR')}
                   </p>
                 )}
               </div>
             </div>
-            {(logoPersonalizada || revendaAtual?.logoPersonalizada) && (
+            {(logoPersonalizada || revendaAtual?.logo_personalizada) && (
               <img 
-                src={logoPersonalizada || revendaAtual?.logoPersonalizada} 
+                src={logoPersonalizada || revendaAtual?.logo_personalizada} 
                 alt="Logo"
                 className={`absolute bottom-2 w-12 h-12 rounded bg-white/20 backdrop-blur-sm p-1 ${
                   posicaoLogo === 'centro' ? 'left-1/2 transform -translate-x-1/2' : 'left-2'
@@ -2781,791 +2802,6 @@ function BannerForm({ onSubmit, onClose, usuarioLogado, revendas, onAtualizarLog
         )}
       </div>
     </div>
-  )
-}
-
-function ConfigForm({ config, onSubmit, onClose }: {
-  config: ConfigSistema
-  onSubmit: (config: Partial<ConfigSistema>) => void
-  onClose: () => void
-}) {
-  const [formData, setFormData] = useState(config)
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSubmit(formData)
-    onClose()
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <Label htmlFor="nomeSistema">Nome do Sistema</Label>
-        <Input
-          id="nomeSistema"
-          value={formData.nomeSistema}
-          onChange={(e) => setFormData({...formData, nomeSistema: e.target.value})}
-          className="bg-slate-700 border-slate-600 text-white"
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="logoUrl">URL da Logo</Label>
-        <Input
-          id="logoUrl"
-          value={formData.logoUrl}
-          onChange={(e) => setFormData({...formData, logoUrl: e.target.value})}
-          className="bg-slate-700 border-slate-600 text-white"
-          placeholder="https://exemplo.com/logo.png"
-        />
-        {formData.logoUrl && (
-          <div className="mt-2">
-            <img src={formData.logoUrl} alt="Preview Logo" className="w-16 h-16 rounded-lg" />
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="corPrimaria">Cor Primária</Label>
-          <Input
-            id="corPrimaria"
-            type="color"
-            value={formData.corPrimaria}
-            onChange={(e) => setFormData({...formData, corPrimaria: e.target.value})}
-            className="bg-slate-700 border-slate-600 h-12"
-          />
-        </div>
-        
-        <div>
-          <Label htmlFor="corSecundaria">Cor Secundária</Label>
-          <Input
-            id="corSecundaria"
-            type="color"
-            value={formData.corSecundaria}
-            onChange={(e) => setFormData({...formData, corSecundaria: e.target.value})}
-            className="bg-slate-700 border-slate-600 h-12"
-          />
-        </div>
-      </div>
-      
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
-          <Settings className="w-4 h-4 mr-2" />
-          Salvar Configurações
-        </Button>
-      </div>
-    </form>
-  )
-}
-
-function UsuariosManager({ usuarios, onGerenciar, usuarioAtual }: {
-  usuarios: Usuario[]
-  onGerenciar: (usuarioId: string, acao: 'ativar' | 'desativar' | 'promover' | 'rebaixar') => void
-  usuarioAtual: Usuario
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4">
-        {usuarios.map((usuario) => (
-          <Card key={usuario.id} className="bg-[#87CEEB]/5 border-white/10">
-            <CardContent className="p-4">
-              <div className="flex justify-between items-center">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-white">{usuario.nome}</h3>
-                    {usuario.tipo === 'admin' && <Crown className="w-4 h-4 text-yellow-400" />}
-                    <Badge className={usuario.ativo ? 'bg-green-500' : 'bg-red-500'}>
-                      {usuario.ativo ? 'Ativo' : 'Inativo'}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-gray-300">{usuario.email}</p>
-                  <p className="text-xs text-gray-400">
-                    Cadastro: {new Date(usuario.dataCadastro).toLocaleDateString('pt-BR')} • 
-                    Último acesso: {new Date(usuario.ultimoAcesso).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-                
-                {usuario.id !== usuarioAtual.id && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onGerenciar(usuario.id, usuario.ativo ? 'desativar' : 'ativar')}
-                      className={usuario.ativo ? 'border-red-500/50 text-red-400' : 'border-green-500/50 text-green-400'}
-                    >
-                      {usuario.ativo ? 'Desativar' : 'Ativar'}
-                    </Button>
-                    
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onGerenciar(usuario.id, usuario.tipo === 'admin' ? 'rebaixar' : 'promover')}
-                      className="border-yellow-500/50 text-yellow-400"
-                    >
-                      {usuario.tipo === 'admin' ? 'Rebaixar' : 'Promover'}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function RevendasManager({ revendas, onAdicionar, onEditar, onExcluir, onGerenciar, onEditarClick }: {
-  revendas: Revenda[]
-  onAdicionar: (revenda: Omit<Revenda, 'id' | 'dataCadastro' | 'ultimoAcesso'>) => void
-  onEditar: (revenda: Revenda) => void
-  onExcluir: (revendaId: string) => void
-  onGerenciar: (revendaId: string, acao: 'bloquear' | 'desbloquear' | 'renovar') => void
-  onEditarClick: (revenda: Revenda) => void
-}) {
-  const [modalNovaRevenda, setModalNovaRevenda] = useState(false)
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-semibold text-white">Revendas Cadastradas</h3>
-          <p className="text-sm text-gray-400">Gerencie todas as revendas do sistema com alertas automáticos</p>
-        </div>
-        
-        <Dialog open={modalNovaRevenda} onOpenChange={setModalNovaRevenda}>
-          <DialogTrigger asChild>
-            <Button className="bg-green-600 hover:bg-green-700">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Nova Revenda
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Cadastrar Nova Revenda</DialogTitle>
-              <DialogDescription className="text-slate-300">
-                Crie uma nova revenda com alertas automáticos de vencimento
-              </DialogDescription>
-            </DialogHeader>
-            <NovaRevendaForm 
-              onSubmit={onAdicionar} 
-              onClose={() => setModalNovaRevenda(false)} 
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="grid gap-4">
-        {revendas.length === 0 ? (
-          <Card className="bg-[#87CEEB]/5 border-white/10">
-            <CardContent className="p-8 text-center">
-              <UserPlus className="w-12 h-12 mx-auto mb-4 text-gray-400 opacity-50" />
-              <p className="text-gray-400">Nenhuma revenda cadastrada ainda.</p>
-              <p className="text-sm text-gray-500 mt-2">Clique em "Nova Revenda" para começar.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          revendas.map((revenda) => {
-            const hoje = new Date()
-            const dataVencimento = new Date(revenda.dataVencimento)
-            const diffTime = dataVencimento.getTime() - hoje.getTime()
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-            
-            let alertaVencimento = ''
-            let corAlerta = ''
-            
-            if (diffDays <= 5 && diffDays >= 0) {
-              alertaVencimento = `Vence em ${diffDays} dia(s)`
-              corAlerta = diffDays <= 1 ? 'bg-red-500' : diffDays <= 3 ? 'bg-orange-500' : 'bg-yellow-500'
-            } else if (diffDays < 0) {
-              alertaVencimento = 'Vencido'
-              corAlerta = 'bg-red-600'
-            }
-            
-            return (
-              <Card key={revenda.id} className="bg-[#87CEEB]/5 border-white/10">
-                <CardContent className="p-4">
-                  <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3">
-                        <h3 className="font-semibold text-white text-lg">{revenda.nome}</h3>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge className={revenda.ativo ? 'bg-green-500' : 'bg-red-500'}>
-                            {revenda.ativo ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                          {revenda.tipo === 'master' && (
-                            <Badge className="bg-yellow-500">
-                              <Crown className="w-3 h-3 mr-1" />
-                              Master
-                            </Badge>
-                          )}
-                          {revenda.tipo === 'simples' && (
-                            <Badge className="bg-blue-500">
-                              Simples
-                            </Badge>
-                          )}
-                          {revenda.bloqueado && (
-                            <Badge className="bg-red-600">
-                              <Lock className="w-3 h-3 mr-1" />
-                              Bloqueado
-                            </Badge>
-                          )}
-                          {alertaVencimento && (
-                            <Badge className={corAlerta}>
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              {alertaVencimento}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 text-sm text-gray-300">
-                        <div>Email: {revenda.email}</div>
-                        <div>Valor Mensal: R$ {revenda.valorMensal.toFixed(2)}</div>
-                        <div>
-                          Vencimento: {new Date(revenda.dataVencimento).toLocaleDateString('pt-BR')}
-                          {diffDays < 0 && (
-                            <span className="text-red-400 ml-2">(Vencido há {Math.abs(diffDays)} dias)</span>
-                          )}
-                        </div>
-                        <div>
-                          Último Acesso: {new Date(revenda.ultimoAcesso).toLocaleDateString('pt-BR')}
-                        </div>
-                      </div>
-                      
-                      {revenda.observacoes && (
-                        <p className="text-sm text-gray-400 italic">{revenda.observacoes}</p>
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onEditarClick(revenda)}
-                        className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20"
-                      >
-                        <Edit className="w-4 h-4 mr-1" />
-                        Editar
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onExcluir(revenda.id)}
-                        className="border-red-500/50 text-red-400 hover:bg-red-500/20"
-                      >
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        Excluir
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onGerenciar(revenda.id, revenda.bloqueado ? 'desbloquear' : 'bloquear')}
-                        className={revenda.bloqueado ? 
-                          'border-green-500/50 text-green-400 hover:bg-green-500/20' : 
-                          'border-red-500/50 text-red-400 hover:bg-red-500/20'
-                        }
-                      >
-                        {revenda.bloqueado ? (
-                          <>
-                            <UserCheck className="w-4 h-4 mr-1" />
-                            Desbloquear
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="w-4 h-4 mr-1" />
-                            Bloquear
-                          </>
-                        )}
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onGerenciar(revenda.id, 'renovar')}
-                        className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20"
-                      >
-                        <RefreshCw className="w-4 h-4 mr-1" />
-                        Renovar
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })
-        )}
-      </div>
-    </div>
-  )
-}
-
-function NovaRevendaForm({ onSubmit, onClose }: {
-  onSubmit: (revenda: Omit<Revenda, 'id' | 'dataCadastro' | 'ultimoAcesso'>) => void
-  onClose: () => void
-}) {
-  const [formData, setFormData] = useState({
-    nome: '',
-    email: '',
-    senha: '',
-    ativo: true,
-    dataVencimento: '',
-    valorMensal: 50.00,
-    bloqueado: false,
-    observacoes: '',
-    logoPersonalizada: '',
-    posicaoLogo: 'direita' as 'direita' | 'centro',
-    diasAlertaVencimento: 5,
-    tipo: 'simples' as 'master' | 'simples',
-    permissoes: {
-      clientes: true,
-      pagamentos: true,
-      banners: true,
-      configuracoes: false,
-      usuarios: false,
-      revendas: false,
-      planos: false
-    }
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Definir permissões baseadas no tipo
-    let permissoes = formData.permissoes
-    
-    if (formData.tipo === 'master') {
-      // Revenda master tem todas as permissões EXCETO configurações
-      permissoes = {
-        clientes: true,
-        pagamentos: true,
-        banners: true,
-        configuracoes: false, // SEMPRE REMOVIDO para revenda master
-        usuarios: true,
-        revendas: true,
-        planos: true
-      }
-    }
-    
-    onSubmit({
-      ...formData,
-      permissoes
-    })
-    onClose()
-  }
-
-  // Definir data padrão para 30 dias a partir de hoje
-  useEffect(() => {
-    const dataVencimento = new Date()
-    dataVencimento.setDate(dataVencimento.getDate() + 30)
-    setFormData(prev => ({
-      ...prev,
-      dataVencimento: dataVencimento.toISOString().split('T')[0]
-    }))
-  }, [])
-
-  const handlePermissaoChange = (permissao: keyof NonNullable<Revenda['permissoes']>, checked: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      permissoes: {
-        ...prev.permissoes,
-        [permissao]: checked
-      }
-    }))
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="nome">Nome da Revenda</Label>
-          <Input
-            id="nome"
-            value={formData.nome}
-            onChange={(e) => setFormData({...formData, nome: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            placeholder="Ex: Revenda Premium IPTV"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="email">Email de Acesso</Label>
-          <Input
-            id="email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({...formData, email: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            placeholder="revenda@exemplo.com"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="senha">Senha de Acesso</Label>
-          <Input
-            id="senha"
-            type="password"
-            value={formData.senha}
-            onChange={(e) => setFormData({...formData, senha: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            placeholder="Senha segura"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="valorMensal">Valor Mensal (R$)</Label>
-          <Input
-            id="valorMensal"
-            type="number"
-            step="0.01"
-            value={formData.valorMensal}
-            onChange={(e) => setFormData({...formData, valorMensal: parseFloat(e.target.value)})}
-            className="bg-slate-700 border-slate-600 text-white"
-            required
-          />
-        </div>
-        <div className="col-span-1 lg:col-span-2">
-          <Label htmlFor="tipo">Tipo de Revenda</Label>
-          <Select value={formData.tipo} onValueChange={(value: 'master' | 'simples') => setFormData({...formData, tipo: value})}>
-            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-700">
-              <SelectItem value="simples">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  Revenda Simples - Permissões personalizáveis
-                </div>
-              </SelectItem>
-              <SelectItem value="master">
-                <div className="flex items-center gap-2">
-                  <Crown className="w-4 h-4 text-yellow-400" />
-                  Revenda Master - Todos os benefícios (exceto configurações)
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-gray-400 mt-1">
-            {formData.tipo === 'master' ? 
-              '👑 Revenda Master: Acesso a todas as funcionalidades, exceto configurações do sistema' :
-              '📦 Revenda Simples: Selecione as permissões específicas abaixo'
-            }
-          </p>
-        </div>
-        
-        {/* Seleção de Permissões apenas para revenda simples */}
-        {formData.tipo === 'simples' && (
-          <div className="col-span-1 lg:col-span-2">
-            <Label className="text-white mb-3 block">Permissões do Painel</Label>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-slate-700 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="clientes"
-                  checked={formData.permissoes.clientes}
-                  onCheckedChange={(checked) => handlePermissaoChange('clientes', checked as boolean)}
-                />
-                <Label htmlFor="clientes" className="text-sm text-white">Clientes</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="pagamentos"
-                  checked={formData.permissoes.pagamentos}
-                  onCheckedChange={(checked) => handlePermissaoChange('pagamentos', checked as boolean)}
-                />
-                <Label htmlFor="pagamentos" className="text-sm text-white">Pagamentos</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="banners"
-                  checked={formData.permissoes.banners}
-                  onCheckedChange={(checked) => handlePermissaoChange('banners', checked as boolean)}
-                />
-                <Label htmlFor="banners" className="text-sm text-white">Banners</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="usuarios"
-                  checked={formData.permissoes.usuarios}
-                  onCheckedChange={(checked) => handlePermissaoChange('usuarios', checked as boolean)}
-                />
-                <Label htmlFor="usuarios" className="text-sm text-white">Usuários</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="revendas"
-                  checked={formData.permissoes.revendas}
-                  onCheckedChange={(checked) => handlePermissaoChange('revendas', checked as boolean)}
-                />
-                <Label htmlFor="revendas" className="text-sm text-white">Revendas</Label>
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 mt-2">
-              ✅ Selecione quais funcionalidades esta revenda poderá acessar no painel
-            </p>
-          </div>
-        )}
-        
-        <div className="col-span-1 lg:col-span-2">
-          <Label htmlFor="dataVencimento">Data de Vencimento</Label>
-          <Input
-            id="dataVencimento"
-            type="date"
-            value={formData.dataVencimento}
-            onChange={(e) => setFormData({...formData, dataVencimento: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            required
-          />
-          <p className="text-xs text-gray-400 mt-1">
-            ⚠️ Alertas automáticos serão enviados 5 dias antes do vencimento. Bloqueio às 12:00 (Brasília) se não renovado.
-          </p>
-        </div>
-      </div>
-      
-      <div>
-        <Label htmlFor="observacoes">Observações</Label>
-        <Textarea
-          id="observacoes"
-          value={formData.observacoes}
-          onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
-          className="bg-slate-700 border-slate-600 text-white"
-          placeholder="Observações sobre a revenda..."
-          rows={3}
-        />
-      </div>
-      
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button type="submit" className="bg-green-600 hover:bg-green-700">
-          <UserPlus className="w-4 h-4 mr-2" />
-          Cadastrar Revenda
-        </Button>
-      </div>
-    </form>
-  )
-}
-
-function EditarRevendaForm({ revenda, onSubmit, onClose }: {
-  revenda: Revenda
-  onSubmit: (revenda: Revenda) => void
-  onClose: () => void
-}) {
-  const [formData, setFormData] = useState({
-    ...revenda,
-    permissoes: revenda.permissoes || {
-      clientes: true,
-      pagamentos: true,
-      banners: true,
-      configuracoes: false,
-      usuarios: false,
-      revendas: false,
-      planos: false
-    }
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Definir permissões baseadas no tipo
-    let permissoes = formData.permissoes
-    
-    if (formData.tipo === 'master') {
-      // Revenda master tem todas as permissões EXCETO configurações
-      permissoes = {
-        clientes: true,
-        pagamentos: true,
-        banners: true,
-        configuracoes: false, // SEMPRE REMOVIDO para revenda master
-        usuarios: true,
-        revendas: true,
-        planos: true
-      }
-    }
-    
-    onSubmit({
-      ...formData,
-      permissoes
-    })
-  }
-
-  const handlePermissaoChange = (permissao: keyof NonNullable<Revenda['permissoes']>, checked: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      permissoes: {
-        ...prev.permissoes,
-        [permissao]: checked
-      }
-    }))
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="nome">Nome da Revenda</Label>
-          <Input
-            id="nome"
-            value={formData.nome}
-            onChange={(e) => setFormData({...formData, nome: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="email">Email de Acesso</Label>
-          <Input
-            id="email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({...formData, email: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="senha">Nova Senha (deixe em branco para manter atual)</Label>
-          <Input
-            id="senha"
-            type="password"
-            value=""
-            onChange={(e) => e.target.value && setFormData({...formData, senha: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            placeholder="Digite nova senha ou deixe em branco"
-          />
-        </div>
-        <div>
-          <Label htmlFor="valorMensal">Valor Mensal (R$)</Label>
-          <Input
-            id="valorMensal"
-            type="number"
-            step="0.01"
-            value={formData.valorMensal}
-            onChange={(e) => setFormData({...formData, valorMensal: parseFloat(e.target.value)})}
-            className="bg-slate-700 border-slate-600 text-white"
-            required
-          />
-        </div>
-        <div className="col-span-1 lg:col-span-2">
-          <Label htmlFor="tipo">Tipo de Revenda</Label>
-          <Select value={formData.tipo} onValueChange={(value: 'master' | 'simples') => setFormData({...formData, tipo: value})}>
-            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-700">
-              <SelectItem value="simples">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  Revenda Simples - Permissões personalizáveis
-                </div>
-              </SelectItem>
-              <SelectItem value="master">
-                <div className="flex items-center gap-2">
-                  <Crown className="w-4 h-4 text-yellow-400" />
-                  Revenda Master - Todos os benefícios (exceto configurações)
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        {/* Seleção de Permissões apenas para revenda simples */}
-        {formData.tipo === 'simples' && (
-          <div className="col-span-1 lg:col-span-2">
-            <Label className="text-white mb-3 block">Permissões do Painel</Label>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-slate-700 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="clientes"
-                  checked={formData.permissoes.clientes}
-                  onCheckedChange={(checked) => handlePermissaoChange('clientes', checked as boolean)}
-                />
-                <Label htmlFor="clientes" className="text-sm text-white">Clientes</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="pagamentos"
-                  checked={formData.permissoes.pagamentos}
-                  onCheckedChange={(checked) => handlePermissaoChange('pagamentos', checked as boolean)}
-                />
-                <Label htmlFor="pagamentos" className="text-sm text-white">Pagamentos</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="banners"
-                  checked={formData.permissoes.banners}
-                  onCheckedChange={(checked) => handlePermissaoChange('banners', checked as boolean)}
-                />
-                <Label htmlFor="banners" className="text-sm text-white">Banners</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="usuarios"
-                  checked={formData.permissoes.usuarios}
-                  onCheckedChange={(checked) => handlePermissaoChange('usuarios', checked as boolean)}
-                />
-                <Label htmlFor="usuarios" className="text-sm text-white">Usuários</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="revendas"
-                  checked={formData.permissoes.revendas}
-                  onCheckedChange={(checked) => handlePermissaoChange('revendas', checked as boolean)}
-                />
-                <Label htmlFor="revendas" className="text-sm text-white">Revendas</Label>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div className="col-span-1 lg:col-span-2">
-          <Label htmlFor="dataVencimento">Data de Vencimento</Label>
-          <Input
-            id="dataVencimento"
-            type="date"
-            value={formData.dataVencimento}
-            onChange={(e) => setFormData({...formData, dataVencimento: e.target.value})}
-            className="bg-slate-700 border-slate-600 text-white"
-            required
-          />
-        </div>
-      </div>
-      
-      <div>
-        <Label htmlFor="observacoes">Observações</Label>
-        <Textarea
-          id="observacoes"
-          value={formData.observacoes}
-          onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
-          className="bg-slate-700 border-slate-600 text-white"
-          rows={3}
-        />
-      </div>
-      
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-          <Edit className="w-4 h-4 mr-2" />
-          Salvar Alterações
-        </Button>
-      </div>
-    </form>
   )
 }
 
@@ -3595,19 +2831,19 @@ function ClienteDetalhes({ cliente }: { cliente: Cliente }) {
         </div>
         <div>
           <Label className="text-gray-300">Valor Mensal</Label>
-          <p className="text-green-400 font-bold">R$ {cliente.valorMensal.toFixed(2)}</p>
+          <p className="text-green-400 font-bold">R$ {cliente.valor_mensal.toFixed(2)}</p>
         </div>
         <div>
           <Label className="text-gray-300">Data de Vencimento</Label>
-          <p className="text-white">{new Date(cliente.dataVencimento).toLocaleDateString('pt-BR')}</p>
+          <p className="text-white">{new Date(cliente.data_vencimento).toLocaleDateString('pt-BR')}</p>
         </div>
         <div>
           <Label className="text-gray-300">Último Pagamento</Label>
-          <p className="text-white">{new Date(cliente.dataUltimoPagamento).toLocaleDateString('pt-BR')}</p>
+          <p className="text-white">{new Date(cliente.data_ultimo_pagamento).toLocaleDateString('pt-BR')}</p>
         </div>
         <div>
           <Label className="text-gray-300">Data de Cadastro</Label>
-          <p className="text-white">{new Date(cliente.dataCadastro).toLocaleDateString('pt-BR')}</p>
+          <p className="text-white">{new Date(cliente.data_cadastro).toLocaleDateString('pt-BR')}</p>
         </div>
       </div>
       <div>
