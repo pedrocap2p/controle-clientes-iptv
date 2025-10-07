@@ -11,19 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Users, DollarSign, Tv, AlertCircle, Plus, Search, Edit, Trash2, Eye, Calendar, Phone, LogOut, Settings, Image, Download, Upload, Shield, UserCheck, Crown, Film, Monitor, Trophy, UserPlus, Lock, RefreshCw, Star, AlertTriangle, Clock, Database } from 'lucide-react'
-
-// Importar serviços do Supabase
-import { 
-  usuarioService, 
-  revendaService, 
-  clienteService, 
-  bannerService, 
-  planoService, 
-  configService,
-  inicializarDados,
-  verificarConexao
-} from '@/lib/database'
+import { Users, DollarSign, Tv, AlertCircle, Plus, Search, Edit, Trash2, Eye, Calendar, Phone, LogOut, Settings, Image, Download, Upload, Shield, UserCheck, Crown, Film, Monitor, Trophy, UserPlus, Lock, RefreshCw, Star, AlertTriangle, Clock } from 'lucide-react'
 
 interface Usuario {
   id: string
@@ -561,10 +549,6 @@ export default function IPTVManagerPro() {
     cor_secundaria: '#a855f7'
   })
 
-  // Estados de conexão
-  const [conectado, setConectado] = useState(false)
-  const [carregando, setCarregando] = useState(true)
-
   // Estados de UI
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
   const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null)
@@ -588,129 +572,12 @@ export default function IPTVManagerPro() {
   const [resultadosBusca, setResultadosBusca] = useState<any[]>([])
   const [mostrarResultados, setMostrarResultados] = useState(false)
 
-  // Inicialização do sistema com Supabase
+  // Inicialização do sistema com dados locais
   useEffect(() => {
-    const inicializar = async () => {
-      try {
-        setCarregando(true)
-        
-        // Verificar conexão com Supabase
-        const conexaoOk = await verificarConexao()
-        setConectado(conexaoOk)
-        
-        if (conexaoOk) {
-          // Inicializar dados padrão
-          await inicializarDados()
-          
-          // Carregar dados do banco
-          await carregarDados()
-        } else {
-          console.warn('⚠️ Sem conexão com Supabase - usando dados locais')
-          // Fallback para dados locais se não houver conexão
-          carregarDadosLocais()
-        }
-      } catch (error) {
-        console.error('❌ Erro na inicialização:', error)
-        // Sempre usar fallback local em caso de erro
-        setConectado(false)
-        carregarDadosLocais()
-      } finally {
-        setCarregando(false)
-      }
-    }
-
-    inicializar()
+    carregarDadosLocais()
   }, [])
 
-  // Carregar dados do Supabase
-  const carregarDados = async () => {
-    try {
-      const [usuariosData, revendasData, clientesData, bannersData, planosData, configData] = await Promise.all([
-        usuarioService.listar().catch(() => []),
-        revendaService.listar().catch(() => []),
-        clienteService.listar().catch(() => []),
-        bannerService.listar().catch(() => []),
-        planoService.listar().catch(() => []),
-        configService.obter().catch(() => null)
-      ])
-
-      // Converter dados do Supabase para formato da aplicação
-      setUsuarios(usuariosData.map(u => ({
-        id: u.id,
-        nome: u.nome,
-        email: u.email,
-        senha: u.senha,
-        tipo: u.tipo,
-        ativo: u.ativo,
-        data_cadastro: u.data_cadastro,
-        ultimo_acesso: u.ultimo_acesso
-      })))
-
-      setRevendas(revendasData.map(r => ({
-        id: r.id,
-        nome: r.nome,
-        email: r.email,
-        senha: r.senha,
-        ativo: r.ativo,
-        data_vencimento: r.data_vencimento,
-        valor_mensal: r.valor_mensal,
-        data_cadastro: r.data_cadastro,
-        ultimo_acesso: r.ultimo_acesso,
-        bloqueado: r.bloqueado,
-        observacoes: r.observacoes,
-        logo_personalizada: r.logo_personalizada || undefined,
-        posicao_logo: r.posicao_logo,
-        dias_alerta_vencimento: r.dias_alerta_vencimento,
-        tipo: r.tipo,
-        permissoes: r.permissoes
-      })))
-
-      setClientes(clientesData.map(c => ({
-        id: c.id,
-        nome: c.nome,
-        whatsapp: c.whatsapp,
-        plano: c.plano,
-        status: c.status,
-        data_vencimento: c.data_vencimento,
-        valor_mensal: c.valor_mensal,
-        data_ultimo_pagamento: c.data_ultimo_pagamento,
-        observacoes: c.observacoes,
-        data_cadastro: c.data_cadastro,
-        usuario_id: c.usuario_id
-      })))
-
-      setBanners(bannersData.map(b => ({
-        id: b.id,
-        categoria: b.categoria,
-        imagem_url: b.imagem_url,
-        logo_url: b.logo_url,
-        usuario_id: b.usuario_id,
-        data_criacao: b.data_criacao,
-        sinopse: b.sinopse || undefined,
-        data_evento: b.data_evento || undefined,
-        logo_personalizada: b.logo_personalizada || undefined,
-        posicao_logo: b.posicao_logo
-      })))
-
-      setPlanos(planosData)
-
-      if (configData) {
-        setConfigSistema({
-          logo_url: configData.logo_url,
-          nome_sistema: configData.nome_sistema,
-          cor_primaria: configData.cor_primaria,
-          cor_secundaria: configData.cor_secundaria
-        })
-      }
-
-      console.log('✅ Dados carregados do Supabase com sucesso!')
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados do Supabase:', error)
-      throw error
-    }
-  }
-
-  // Fallback para dados locais
+  // Carregar dados locais
   const carregarDadosLocais = () => {
     const STORAGE_PREFIX = 'iptv_manager_v2_'
     
@@ -805,8 +672,31 @@ export default function IPTVManagerPro() {
       setConfigSistema(configSalva)
     }
 
-    console.log('✅ Dados locais carregados como fallback')
+    console.log('✅ Dados locais carregados com sucesso')
   }
+
+  // Salvar dados locais
+  const salvarDadosLocais = () => {
+    const STORAGE_PREFIX = 'iptv_manager_v2_'
+    
+    try {
+      localStorage.setItem(`${STORAGE_PREFIX}usuarios`, JSON.stringify(usuarios))
+      localStorage.setItem(`${STORAGE_PREFIX}revendas`, JSON.stringify(revendas))
+      localStorage.setItem(`${STORAGE_PREFIX}clientes`, JSON.stringify(clientes))
+      localStorage.setItem(`${STORAGE_PREFIX}banners`, JSON.stringify(banners))
+      localStorage.setItem(`${STORAGE_PREFIX}config_sistema`, JSON.stringify(configSistema))
+      localStorage.setItem(`${STORAGE_PREFIX}planos`, JSON.stringify(planos))
+    } catch (error) {
+      console.error('Erro ao salvar dados:', error)
+    }
+  }
+
+  // Salvar dados sempre que houver mudanças
+  useEffect(() => {
+    if (usuarios.length > 0) {
+      salvarDadosLocais()
+    }
+  }, [usuarios, revendas, clientes, banners, configSistema, planos])
 
   // Verificar vencimentos de revendas
   useEffect(() => {
@@ -848,64 +738,30 @@ export default function IPTVManagerPro() {
   // Funções de autenticação
   const fazerLogin = async (email: string, senha: string) => {
     try {
-      if (conectado) {
-        // Tentar login com Supabase
-        const usuario = await usuarioService.buscarPorEmail(email)
-        if (usuario && usuario.senha === senha && usuario.ativo) {
-          const usuarioAtualizado = { 
-            ...usuario, 
-            ultimo_acesso: new Date().toISOString() 
-          }
-          await usuarioService.atualizar(usuario.id, { ultimo_acesso: new Date().toISOString() })
-          setUsuarioLogado(usuarioAtualizado)
-          setMostrarLogin(false)
-          return
-        }
+      // Login local
+      const usuario = usuarios.find(u => u.email === email && u.senha === senha && u.ativo)
+      if (usuario) {
+        const usuarioAtualizado = { ...usuario, ultimo_acesso: new Date().toISOString() }
+        setUsuarioLogado(usuarioAtualizado)
+        setMostrarLogin(false)
+        return
+      }
 
-        // Verificar revendas
-        const revenda = await revendaService.buscarPorEmail(email)
-        if (revenda && revenda.senha === senha && revenda.ativo && !revenda.bloqueado) {
-          const usuarioRevenda: Usuario = {
-            id: revenda.id,
-            nome: revenda.nome,
-            email: revenda.email,
-            senha: revenda.senha,
-            tipo: 'usuario',
-            ativo: true,
-            data_cadastro: revenda.data_cadastro,
-            ultimo_acesso: new Date().toISOString()
-          }
-          await revendaService.atualizar(revenda.id, { ultimo_acesso: new Date().toISOString() })
-          setUsuarioLogado(usuarioRevenda)
-          setMostrarLogin(false)
-          return
+      const revenda = revendas.find(r => r.email === email && r.senha === senha && r.ativo && !r.bloqueado)
+      if (revenda) {
+        const usuarioRevenda: Usuario = {
+          id: revenda.id,
+          nome: revenda.nome,
+          email: revenda.email,
+          senha: revenda.senha,
+          tipo: 'usuario',
+          ativo: true,
+          data_cadastro: revenda.data_cadastro,
+          ultimo_acesso: new Date().toISOString()
         }
-      } else {
-        // Fallback para login local
-        const usuario = usuarios.find(u => u.email === email && u.senha === senha && u.ativo)
-        if (usuario) {
-          const usuarioAtualizado = { ...usuario, ultimo_acesso: new Date().toISOString() }
-          setUsuarioLogado(usuarioAtualizado)
-          setMostrarLogin(false)
-          return
-        }
-
-        const revenda = revendas.find(r => r.email === email && r.senha === senha && r.ativo && !r.bloqueado)
-        if (revenda) {
-          const usuarioRevenda: Usuario = {
-            id: revenda.id,
-            nome: revenda.nome,
-            email: revenda.email,
-            senha: revenda.senha,
-            tipo: 'usuario',
-            ativo: true,
-            data_cadastro: revenda.data_cadastro,
-            ultimo_acesso: new Date().toISOString()
-          }
-          setUsuarioLogado(usuarioRevenda)
-          setMostrarLogin(false)
-          return
-        }
+        setUsuarioLogado(usuarioRevenda)
+        setMostrarLogin(false)
+        return
       }
 
       alert('Email ou senha incorretos, ou conta inativa!')
@@ -968,34 +824,19 @@ export default function IPTVManagerPro() {
     totalClientes: clientesFiltrados.length,
     clientesAtivos: clientesFiltrados.filter(c => c.status === 'ativo').length,
     clientesVencidos: clientesFiltrados.filter(c => c.status === 'vencido').length,
-    receitaMensal: clientesFiltrados.filter(c => c.status === 'ativo').reduce((acc, c) => acc + c.valor_mensal, 0)
+    receitaMensal: clientesFiltrados.filter(c => c.status === 'ativo').reduce((acc, c) => acc + (c.valor_mensal || 0), 0)
   }
 
-  // Funções de gerenciamento com Supabase
+  // Funções de gerenciamento locais
   const adicionarCliente = async (dadosCliente: Omit<Cliente, 'id' | 'data_cadastro' | 'usuario_id'>) => {
     try {
-      const novoCliente = {
+      const novoCliente: Cliente = {
         ...dadosCliente,
+        id: Date.now().toString(),
         data_cadastro: new Date().toISOString().split('T')[0],
         usuario_id: usuarioLogado?.id || ''
       }
-
-      if (conectado) {
-        const clienteCriado = await clienteService.criar(novoCliente)
-        setClientes([...clientes, {
-          ...clienteCriado,
-          data_vencimento: clienteCriado.data_vencimento,
-          data_ultimo_pagamento: clienteCriado.data_ultimo_pagamento,
-          data_cadastro: clienteCriado.data_cadastro
-        }])
-      } else {
-        // Fallback local
-        const clienteLocal: Cliente = {
-          ...novoCliente,
-          id: Date.now().toString()
-        }
-        setClientes([...clientes, clienteLocal])
-      }
+      setClientes([...clientes, novoCliente])
     } catch (error) {
       console.error('Erro ao adicionar cliente:', error)
       alert('Erro ao adicionar cliente. Tente novamente.')
@@ -1004,19 +845,6 @@ export default function IPTVManagerPro() {
 
   const editarCliente = async (clienteEditado: Cliente) => {
     try {
-      if (conectado) {
-        await clienteService.atualizar(clienteEditado.id, {
-          nome: clienteEditado.nome,
-          whatsapp: clienteEditado.whatsapp,
-          plano: clienteEditado.plano,
-          status: clienteEditado.status,
-          data_vencimento: clienteEditado.data_vencimento,
-          valor_mensal: clienteEditado.valor_mensal,
-          data_ultimo_pagamento: clienteEditado.data_ultimo_pagamento,
-          observacoes: clienteEditado.observacoes
-        })
-      }
-      
       setClientes(clientes.map(cliente => 
         cliente.id === clienteEditado.id ? clienteEditado : cliente
       ))
@@ -1029,10 +857,6 @@ export default function IPTVManagerPro() {
   const excluirCliente = async (clienteId: string) => {
     if (confirm('Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.')) {
       try {
-        if (conectado) {
-          await clienteService.excluir(clienteId)
-        }
-        
         setClientes(clientes.filter(cliente => cliente.id !== clienteId))
         setPagamentos(pagamentos.filter(pagamento => pagamento.clienteId !== clienteId))
       } catch (error) {
@@ -1045,32 +869,16 @@ export default function IPTVManagerPro() {
   const criarBanner = async (dadosBanner: Omit<Banner, 'id' | 'data_criacao' | 'usuario_id'>) => {
     try {
       const revendaAtual = revendas.find(r => r.id === usuarioLogado?.id)
-      const novoBanner = {
+      const novoBanner: Banner = {
         ...dadosBanner,
+        id: Date.now().toString(),
         data_criacao: new Date().toISOString(),
         usuario_id: usuarioLogado?.id || '',
         logo_url: configSistema.logo_url,
         logo_personalizada: revendaAtual?.logo_personalizada || '',
         posicao_logo: revendaAtual?.posicao_logo || 'direita'
       }
-
-      if (conectado) {
-        const bannerCriado = await bannerService.criar(novoBanner)
-        setBanners([...banners, {
-          ...bannerCriado,
-          imagem_url: bannerCriado.imagem_url,
-          logo_url: bannerCriado.logo_url,
-          usuario_id: bannerCriado.usuario_id,
-          data_criacao: bannerCriado.data_criacao
-        }])
-      } else {
-        // Fallback local
-        const bannerLocal: Banner = {
-          ...novoBanner,
-          id: Date.now().toString()
-        }
-        setBanners([...banners, bannerLocal])
-      }
+      setBanners([...banners, novoBanner])
     } catch (error) {
       console.error('Erro ao criar banner:', error)
       alert('Erro ao criar banner. Tente novamente.')
@@ -1080,41 +888,12 @@ export default function IPTVManagerPro() {
   const excluirBanner = async (bannerId: string) => {
     if (confirm('Tem certeza que deseja excluir este banner?')) {
       try {
-        if (conectado) {
-          await bannerService.excluir(bannerId)
-        }
-        
         setBanners(banners.filter(banner => banner.id !== bannerId))
       } catch (error) {
         console.error('Erro ao excluir banner:', error)
         alert('Erro ao excluir banner. Tente novamente.')
       }
     }
-  }
-
-  // Tela de carregamento
-  if (carregando) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-[#87CEEB]/10 backdrop-blur-sm border-white/20">
-          <CardContent className="p-8 text-center">
-            <div className="flex items-center justify-center gap-3 mb-6">
-              <Tv className="w-10 h-10 text-purple-400" />
-              <h1 className="text-2xl font-bold text-white">IPTV Manager Pro</h1>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center justify-center gap-2">
-                <Database className="w-5 h-5 text-blue-400 animate-pulse" />
-                <span className="text-white">Conectando ao banco de dados...</span>
-              </div>
-              <div className="w-full bg-slate-700 rounded-full h-2">
-                <div className="bg-purple-600 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   // Tela de Login
@@ -1131,17 +910,6 @@ export default function IPTVManagerPro() {
             <CardDescription className="text-purple-200">
               Entre com suas credenciais de acesso
             </CardDescription>
-            {!conectado && (
-              <div className="mt-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                  <span className="text-yellow-200 text-sm font-medium">Modo offline - dados locais</span>
-                </div>
-                <p className="text-yellow-200 text-xs">
-                  Para usar o banco de dados Supabase, vá em Configurações do Projeto → Integrações → Conectar Supabase
-                </p>
-              </div>
-            )}
           </CardHeader>
           <CardContent>
             <LoginForm onLogin={fazerLogin} />
@@ -1155,16 +923,6 @@ export default function IPTVManagerPro() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Status de Conexão */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database className={`w-4 h-4 ${conectado ? 'text-green-400' : 'text-yellow-400'}`} />
-            <span className={`text-sm ${conectado ? 'text-green-400' : 'text-yellow-400'}`}>
-              {conectado ? 'Conectado ao Supabase' : 'Modo offline - dados locais'}
-            </span>
-          </div>
-        </div>
-
         {/* Alertas de Vencimento */}
         {alertasVencimento.length > 0 && (
           <div className="space-y-2">
@@ -1195,10 +953,10 @@ export default function IPTVManagerPro() {
                     {revendas.find(r => r.id === usuarioLogado.id)?.tipo === 'master' ? (
                       <>
                         <Crown className="inline w-3 h-3 mr-1 text-yellow-400" />
-                        Revenda Master - R$ {revendas.find(r => r.id === usuarioLogado.id)?.valor_mensal.toFixed(2)}/mês
+                        Revenda Master - R$ {(revendas.find(r => r.id === usuarioLogado.id)?.valor_mensal || 0).toFixed(2)}/mês
                       </>
                     ) : (
-                      `Revenda Simples - R$ ${revendas.find(r => r.id === usuarioLogado.id)?.valor_mensal.toFixed(2)}/mês`
+                      `Revenda Simples - R$ ${(revendas.find(r => r.id === usuarioLogado.id)?.valor_mensal || 0).toFixed(2)}/mês`
                     )}
                   </span>
                 )}
@@ -1423,7 +1181,7 @@ export default function IPTVManagerPro() {
                                   
                                   <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 text-sm">
                                     <span className="text-purple-300">Plano: {cliente.plano}</span>
-                                    <span className="text-green-300">R$ {cliente.valor_mensal.toFixed(2)}/mês</span>
+                                    <span className="text-green-300">R$ {(cliente.valor_mensal || 0).toFixed(2)}/mês</span>
                                   </div>
                                 </div>
                                 
@@ -1539,7 +1297,7 @@ export default function IPTVManagerPro() {
                                       
                                       <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 text-sm">
                                         <span className="text-purple-300">Plano: {cliente.plano}</span>
-                                        <span className="text-green-300">R$ {cliente.valor_mensal.toFixed(2)}/mês</span>
+                                        <span className="text-green-300">R$ {(cliente.valor_mensal || 0).toFixed(2)}/mês</span>
                                       </div>
                                     </div>
                                     
@@ -1961,7 +1719,7 @@ function NovoClienteForm({ onSubmit, onClose }: {
             type="number"
             step="0.01"
             value={formData.valor_mensal}
-            onChange={(e) => setFormData({...formData, valor_mensal: parseFloat(e.target.value)})}
+            onChange={(e) => setFormData({...formData, valor_mensal: parseFloat(e.target.value) || 0})}
             className="bg-slate-700 border-slate-600 text-white"
             required
           />
@@ -2071,7 +1829,7 @@ function EditarClienteForm({ cliente, onSubmit, onClose }: {
             type="number"
             step="0.01"
             value={formData.valor_mensal}
-            onChange={(e) => setFormData({...formData, valor_mensal: parseFloat(e.target.value)})}
+            onChange={(e) => setFormData({...formData, valor_mensal: parseFloat(e.target.value) || 0})}
             className="bg-slate-700 border-slate-600 text-white"
             required
           />
@@ -2140,7 +1898,7 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
       .replace('{nome}', cliente.nome)
       .replace('{dias}', diffDays.toString())
       .replace('{data}', dataVencimento.toLocaleDateString('pt-BR'))
-      .replace('{valor}', cliente.valor_mensal.toFixed(2))
+      .replace('{valor}', (cliente.valor_mensal || 0).toFixed(2))
     
     const numero = numeroWhatsApp || whatsappNumero || cliente.whatsapp.replace(/\D/g, '')
     const url = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`
@@ -2230,7 +1988,7 @@ function PagamentosWhatsApp({ clientes }: { clientes: Cliente[] }) {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 text-sm text-gray-300">
                       <span>📱 {cliente.whatsapp}</span>
                       <span>📅 Vence: {dataVencimento.toLocaleDateString('pt-BR')}</span>
-                      <span>💰 R$ {cliente.valor_mensal.toFixed(2)}</span>
+                      <span>💰 R$ {(cliente.valor_mensal || 0).toFixed(2)}</span>
                     </div>
                   </div>
                   
@@ -2831,7 +2589,7 @@ function ClienteDetalhes({ cliente }: { cliente: Cliente }) {
         </div>
         <div>
           <Label className="text-gray-300">Valor Mensal</Label>
-          <p className="text-green-400 font-bold">R$ {cliente.valor_mensal.toFixed(2)}</p>
+          <p className="text-green-400 font-bold">R$ {(cliente.valor_mensal || 0).toFixed(2)}</p>
         </div>
         <div>
           <Label className="text-gray-300">Data de Vencimento</Label>
